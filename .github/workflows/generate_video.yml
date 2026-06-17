@@ -42,6 +42,7 @@ jobs:
   morning_long:
     if: github.event.schedule == '30 3 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.format == 'long')
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -102,6 +103,7 @@ jobs:
   evening_long:
     if: github.event.schedule == '0 13 * * *'
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5

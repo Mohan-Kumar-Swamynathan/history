@@ -9,7 +9,7 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_LONG_SCRIPT, should_use_llm
+from src.core.llm_policy import STAGE_LONG_SCRIPT, resolve_llm_mode, should_use_llm
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_ORDER, BEAT_EMOTIONS, build_offline_long_script
@@ -23,18 +23,17 @@ class NarrativeGenerator:
         self.validator = ScriptValidator()
 
     def generate(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
-        if has_llm_credentials() and should_use_llm(STAGE_LONG_SCRIPT):
+        if not should_use_llm(STAGE_LONG_SCRIPT):
+            log.info("Using offline 24-beat long script (llm_mode=%s)", resolve_llm_mode())
+            return build_offline_long_script(topic, research)
+
+        if has_llm_credentials():
             try:
                 script = self._generate_with_llm(topic, research)
                 result = self.validator.validate_long_script(script, topic)
                 if result.valid:
                     return script
-                log.warning("Script validation failed: %s — retrying", result.errors)
-                script = self._generate_with_llm(topic, research, feedback=result.errors)
-                result = self.validator.validate_long_script(script, topic)
-                if result.valid:
-                    return script
-                log.warning("Retry failed validation: %s — offline fallback", result.errors)
+                log.warning("Script validation failed: %s — offline fallback", result.errors)
             except Exception as exc:
                 log.warning("LLM narrative failed: %s — using offline script", exc)
         return build_offline_long_script(topic, research)

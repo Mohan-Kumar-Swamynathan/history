@@ -13,13 +13,6 @@ STAGE_LONG_SCRIPT = "long_script"
 STAGE_SHORTS_SCRIPT = "shorts_script"
 STAGE_METADATA = "metadata"
 
-_MINIMAL_OFFLINE_STAGES = frozenset({
-    STAGE_TOPIC,
-    STAGE_RESEARCH,
-    STAGE_SHORTS_SCRIPT,
-    STAGE_METADATA,
-})
-
 
 def resolve_llm_mode() -> str:
     if LLM_MODE in {"offline", "minimal", "full"}:
@@ -31,10 +24,8 @@ def resolve_llm_mode() -> str:
 
 def should_use_llm(stage: str) -> bool:
     mode = resolve_llm_mode()
-    if mode == "offline":
+    if mode in {"offline", "minimal"}:
         return False
-    if mode == "minimal":
-        return stage == STAGE_LONG_SCRIPT
     return True
 
 
