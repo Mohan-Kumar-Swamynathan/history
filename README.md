@@ -1,12 +1,61 @@
-# வரலாறு விழிப்பு — Tamil History YouTube Bot
+# துளிர் — Tamil Storytelling Channel
 
-Fully automated Tamil History storytelling YouTube channel.
+Fully automated Tamil storytelling YouTube channel (Almost Everything style).
 
-**Pipeline:** Trending topic discovery → Gemini script → Pexels footage → BGM → Neural TTS → Thumbnail → Video → **YouTube upload**
+**Active pipeline:** `generate_video.py` → `src/pipelines/` (unified framework)
+
+**Pipeline:** Topic scoring → 24-beat story script → Edge TTS → whiteboard animation → subtitles → Shorts → YouTube upload
 
 ---
 
-## Trending Topic Discovery (default)
+## Quick start (துளிர் unified pipeline)
+
+```bash
+git clone https://github.com/Mohan-Kumar-Swamynathan/history.git
+cd history
+pip install -r requirements.txt
+
+export GEMINI_KEY="your-gemini-key"
+export GROQ_API_KEY="your-groq-key"          # optional
+export GITHUB_TOKEN="ghp_..."                # GitHub Models fallback
+export CLIENT_SECRETS_BASE64="..."
+export YOUTUBE_TOKEN_BASE64="..."
+
+# Long video (8-12 min) + Shorts bundle
+python generate_video.py --format long --upload
+
+# Shorts only (30-60s)
+python generate_video.py --format short --upload
+
+# Generate without upload
+python generate_video.py --format short
+```
+
+### Daily automation (GitHub Actions)
+
+Workflow: **Actions → Thulir Daily Content** (`generate_video.yml`)
+
+| Slot | IST | Format |
+|------|-----|--------|
+| morning_long | 09:00 | Long + Shorts |
+| morning_short | 09:30 | Shorts |
+| evening_long | 18:30 | Long |
+| evening_short | 19:00 | Shorts |
+
+Legacy workflows (`thulir_daily.yml`, `bot.py`, `thulir_v2_bot.py`, etc.) are **disabled** — manual trigger only.
+
+---
+
+## Legacy: வரலாறு விழிப்பு (History bot)
+
+The old history documentary pipeline (`bot.py`, Pexels footage) is kept for reference but no longer runs on schedule.
+
+```bash
+python3 bot.py --list
+python3 bot.py --skip-upload
+```
+
+---
 
 Each daily run automatically discovers a fresh Tamil history topic:
 

@@ -1,9 +1,12 @@
 name: Thulir Daily
 
+# DEPRECATED — use "Thulir Daily Content" (generate_video.yml) instead.
+# Cron disabled so only the unified src/ pipeline runs on schedule.
+
 on:
-  schedule:
-    - cron: "30 3 * * *"
-    - cron: "30 14 * * *"
+  # schedule:
+  #   - cron: "30 3 * * *"
+  #   - cron: "30 14 * * *"
   push:
     paths:
       - "thulir_trigger.txt"

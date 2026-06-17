@@ -1,8 +1,10 @@
 name: Tamil History — Daily Video Pipeline
 
+# DEPRECATED — use generate_video.yml for Thulir channel. Manual trigger only.
+
 on:
-  schedule:
-    - cron: "15 14 * * *"
+  # schedule:
+  #   - cron: "15 14 * * *"
 
   workflow_dispatch:
     inputs:
