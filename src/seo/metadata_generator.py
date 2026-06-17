@@ -8,6 +8,7 @@ import re
 from typing import List
 
 from src.core.llm_client import generate_text, has_llm_credentials
+from src.core.llm_policy import STAGE_METADATA, should_use_llm
 from src.core.models import StoryBeat, TopicCandidate, VideoMetadata
 
 log = logging.getLogger(__name__)
@@ -21,7 +22,7 @@ class MetadataGenerator:
         chapters: List[dict],
     ) -> VideoMetadata:
         preview = " ".join(beat.narration_ta for beat in beats[:3])[:400]
-        if has_llm_credentials():
+        if has_llm_credentials() and should_use_llm(STAGE_METADATA):
             try:
                 return self._generate_with_llm(topic, preview, chapters)
             except Exception as exc:

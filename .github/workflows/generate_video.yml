@@ -36,6 +36,7 @@ env:
   GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
   GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
   PYTHONUNBUFFERED:      "1"
+  LLM_MODE:              minimal
 
 jobs:
   morning_long:

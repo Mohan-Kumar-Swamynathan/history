@@ -14,6 +14,7 @@ import yaml
 
 from src.core.config_loader import CONFIG_DIR, get_output_dir, load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
+from src.core.llm_policy import STAGE_TOPIC, should_use_llm, topic_candidate_count
 from src.core.models import ContentBucket, StoryMode, TopicCandidate
 
 log = logging.getLogger(__name__)
@@ -32,7 +33,7 @@ class TopicScorer:
         used_titles = self._load_used_titles()
         target_bucket = content_bucket or self._pick_content_bucket()
 
-        if has_llm_credentials():
+        if has_llm_credentials() and should_use_llm(STAGE_TOPIC):
             try:
                 return self._discover_with_llm(target_bucket, used_titles)
             except Exception as exc:
@@ -46,7 +47,8 @@ class TopicScorer:
         used_titles: List[str],
         count: int = 20,
     ) -> List[TopicCandidate]:
-        if not has_llm_credentials():
+        count = topic_candidate_count(count)
+        if count == 0 or not has_llm_credentials():
             return self._offline_candidate_pool(content_bucket, used_titles)
 
         bucket_label = content_bucket.value
@@ -74,7 +76,7 @@ Return JSON array of {count} objects:
 "wikipedia_subject":"English Wikipedia title if biographical else empty",
 "curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}]"""
 
-        raw = generate_text(prompt, max_tokens=8000)
+        raw = generate_text(prompt, max_tokens=min(3000, count * 250))
         candidates = _parse_candidate_array(raw)
         return [self._normalize_candidate(item) for item in candidates if item]
 

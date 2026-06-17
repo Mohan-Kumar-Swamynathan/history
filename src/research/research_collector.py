@@ -10,6 +10,7 @@ import urllib.request
 from typing import List
 
 from src.core.llm_client import generate_text, has_llm_credentials
+from src.core.llm_policy import STAGE_RESEARCH, should_use_llm
 from src.core.models import ResearchBrief, StoryMode, TopicCandidate
 
 log = logging.getLogger(__name__)
@@ -22,7 +23,7 @@ class ResearchCollector:
             if wiki_brief:
                 return wiki_brief
 
-        if has_llm_credentials():
+        if has_llm_credentials() and should_use_llm(STAGE_RESEARCH):
             try:
                 return self._collect_with_llm(topic)
             except Exception as exc:

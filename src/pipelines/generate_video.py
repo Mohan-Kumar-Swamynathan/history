@@ -81,7 +81,7 @@ class VideoPipeline:
         if include_shorts:
             shorts_script = self.shorts_script_generator.generate(topic, research)
             shorts_path = run_dir / "shorts.mp4"
-            shorts_result = self.shorts_renderer.render_shorts(shorts_script, shorts_path, run_dir)
+            shorts_result = self.shorts_renderer.render_shorts(shorts_script, shorts_path, run_dir, research=research)
             if shorts_result:
                 package.shorts_video_path = str(shorts_result)
                 if not skip_upload:
@@ -228,7 +228,7 @@ class VideoPipeline:
     ) -> VideoPackage:
         shorts_script = self.shorts_script_generator.generate(topic, research)
         shorts_path = run_dir / "shorts.mp4"
-        result = self.shorts_renderer.render_shorts(shorts_script, shorts_path, run_dir)
+        result = self.shorts_renderer.render_shorts(shorts_script, shorts_path, run_dir, research=research)
         beats = shorts_script.beats
         chapters = [{"time": "00:00:00", "title": beat.beat_type.value} for beat in beats[:4]]
         metadata = self.metadata_generator.generate(topic, beats, chapters)

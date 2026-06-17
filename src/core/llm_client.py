@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import time
+import urllib.error
 import urllib.request
 from typing import Callable, List, Optional, Tuple
 
@@ -18,7 +19,7 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
 GEMINI_MODEL = "gemini-2.0-flash"
 GITHUB_MODEL = "openai/gpt-4.1"
 GROQ_MODEL = "llama-3.3-70b-versatile"
-MAX_RETRIES = 3
+MAX_RETRIES = 2
 
 
 def has_llm_credentials() -> bool:
@@ -28,8 +29,17 @@ def has_llm_credentials() -> bool:
 def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 120) -> dict:
     body = json.dumps(payload).encode("utf-8")
     request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:200]
+        raise RuntimeError(f"HTTP Error {exc.code}: {detail or exc.reason}") from exc
+
+
+def _is_rate_or_auth_error(exc: Exception) -> bool:
+    message = str(exc)
+    return any(code in message for code in ("429", "403", "401", "Too Many Requests", "Forbidden"))
 
 
 def _call_gemini(prompt: str, max_tokens: int) -> str:
@@ -94,28 +104,38 @@ def _retry_provider(name: str, call_fn: Callable[[], str]) -> str:
             return result
         except Exception as exc:
             last_error = exc
+            if _is_rate_or_auth_error(exc):
+                log.warning("%s rate/auth error — skipping retries: %s", name, exc)
+                raise RuntimeError(f"{name}: {exc}") from exc
             log.warning("%s attempt %d/%d: %s", name, attempt + 1, MAX_RETRIES, exc)
             if attempt < MAX_RETRIES - 1:
-                time.sleep(2 ** attempt)
+                time.sleep(1 + attempt)
     raise RuntimeError(f"{name} failed after {MAX_RETRIES} attempts: {last_error}")
 
 
 def _build_provider_chain(preferred: Optional[str] = None) -> List[Tuple[str, Callable[[str, int], str]]]:
-    all_providers = [
-        ("gemini", _call_gemini),
-        ("groq", _call_groq),
-        ("github", _call_github_models),
-    ]
+    providers: List[Tuple[str, Callable[[str, int], str]]] = []
+    if GEMINI_KEY:
+        providers.append(("gemini", _call_gemini))
+    if GROQ_API_KEY:
+        providers.append(("groq", _call_groq))
+    if GITHUB_TOKEN:
+        providers.append(("github", _call_github_models))
+
     if preferred:
-        ordered = [provider for provider in all_providers if provider[0] == preferred]
-        ordered += [provider for provider in all_providers if provider[0] != preferred]
+        ordered = [provider for provider in providers if provider[0] == preferred]
+        ordered += [provider for provider in providers if provider[0] != preferred]
         return ordered
-    return all_providers
+    return providers
 
 
 def generate_text(prompt: str, max_tokens: int = 4096, preferred: Optional[str] = None) -> str:
+    chain = _build_provider_chain(preferred)
+    if not chain:
+        raise RuntimeError("No LLM providers configured")
+
     errors: List[str] = []
-    for name, provider_fn in _build_provider_chain(preferred):
+    for name, provider_fn in chain:
         try:
             return _retry_provider(name, lambda fn=provider_fn: fn(prompt, max_tokens))
         except Exception as exc:

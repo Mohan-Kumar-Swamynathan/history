@@ -15,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.animation_engine.animation_engine import AnimationEngine
 from src.core.config_loader import load_emotions_config, load_platform_config, load_topics_config
-from src.core.models import BeatAudioSegment, NarrationBundle, NarrativeScript, ScenePlan, ShortsScript, WordTiming
+from src.core.models import BeatAudioSegment, NarrationBundle, NarrativeScript, ResearchBrief, ScenePlan, ShortsScript, WordTiming
 from src.renderer.bgm_generator import generate_bgm
 from src.renderer.video_renderer import VideoRenderer
 from src.research.research_collector import ResearchCollector
@@ -47,6 +47,7 @@ class ShortsRenderer:
         shorts_script: ShortsScript,
         output_path: Path,
         run_dir: Path,
+        research: ResearchBrief | None = None,
     ) -> Path | None:
         targets = load_topics_config().get("script_targets", {})
         min_duration = float(targets.get("shorts_min_duration_seconds", 30))
@@ -54,7 +55,8 @@ class ShortsRenderer:
 
         narrative = NarrativeScript(topic=shorts_script.topic, beats=shorts_script.beats, format="short")
         beats = self.beat_extractor.extract(narrative)
-        research = self.research_collector.collect(shorts_script.topic)
+        if research is None:
+            research = self.research_collector.collect(shorts_script.topic)
         scene_plans = self.visual_planner.plan_scenes(beats, research)
 
         narration_bundle = self.voice_engine.synthesize_all_beats(beats, run_dir / "shorts_audio")

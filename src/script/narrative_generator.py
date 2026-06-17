@@ -9,6 +9,7 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
+from src.core.llm_policy import STAGE_LONG_SCRIPT, should_use_llm
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_ORDER, BEAT_EMOTIONS, build_offline_long_script
@@ -22,7 +23,7 @@ class NarrativeGenerator:
         self.validator = ScriptValidator()
 
     def generate(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
-        if has_llm_credentials():
+        if has_llm_credentials() and should_use_llm(STAGE_LONG_SCRIPT):
             try:
                 script = self._generate_with_llm(topic, research)
                 result = self.validator.validate_long_script(script, topic)
