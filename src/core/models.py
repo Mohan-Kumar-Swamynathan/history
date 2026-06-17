@@ -19,6 +19,37 @@ class BeatType(str, Enum):
     CTA = "cta"
 
 
+BEAT_TYPE_ALIASES = {
+    "low_point": BeatType.CONFLICT,
+    "low": BeatType.CONFLICT,
+    "problem": BeatType.CONFLICT,
+    "struggle": BeatType.CONFLICT,
+    "twist": BeatType.TURNING_POINT,
+    "turn": BeatType.TURNING_POINT,
+    "climax": BeatType.TURNING_POINT,
+    "reveal": BeatType.TURNING_POINT,
+    "setup": BeatType.CONTEXT,
+    "background": BeatType.CONTEXT,
+    "payoff": BeatType.RESOLUTION,
+    "ending": BeatType.RESOLUTION,
+    "moral": BeatType.LESSON,
+    "subscribe": BeatType.CTA,
+    "outro": BeatType.CTA,
+}
+
+
+def resolve_beat_type(raw_value: str | None, fallback: BeatType) -> BeatType:
+    if not raw_value:
+        return fallback
+    normalized = raw_value.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in BEAT_TYPE_ALIASES:
+        return BEAT_TYPE_ALIASES[normalized]
+    try:
+        return BeatType(normalized)
+    except ValueError:
+        return fallback
+
+
 class SceneType(str, Enum):
     CHARACTER = "character"
     TIMELINE = "timeline"

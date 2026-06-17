@@ -187,3 +187,11 @@ def test_channel_greeting_and_outro():
 def test_story_mode_enum_values():
     assert StoryMode.BIOGRAPHICAL.value == "biographical"
     assert ContentBucket.BUSINESS.value == "business"
+
+
+def test_resolve_beat_type_aliases():
+    from src.core.models import BeatType, resolve_beat_type
+
+    assert resolve_beat_type("low_point", BeatType.HOOK) == BeatType.CONFLICT
+    assert resolve_beat_type("twist", BeatType.HOOK) == BeatType.TURNING_POINT
+    assert resolve_beat_type("hook", BeatType.CONFLICT) == BeatType.HOOK

@@ -10,7 +10,7 @@ from typing import List
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
 from src.core.llm_policy import STAGE_SHORTS_SCRIPT, should_use_llm
-from src.core.models import BeatType, NarrativeScript, ResearchBrief, ShortsScript, StoryBeat, TopicCandidate
+from src.core.models import BeatType, NarrativeScript, ResearchBrief, ShortsScript, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import _expand_narration
 from src.script.script_validator import ScriptValidator
@@ -58,7 +58,8 @@ Turning point: {topic.turning_point}
 Lesson: {topic.lesson}
 
 FORMAT: exactly {beat_count} beats, {min_words}-{max_words} total Tamil words.
-Structure: Hook → Low point → Twist → Lesson → CTA
+Structure: hook → conflict → turning_point → lesson → cta
+Use ONLY these beat_type values: hook, conflict, turning_point, lesson, cta
 3rd person. Specific numbers. Emotional. NOT generic motivation.
 
 Return JSON array:
@@ -104,7 +105,10 @@ Return JSON array:
         beat_data = json.loads(match.group())
         beats: List[StoryBeat] = []
         for index, item in enumerate(beat_data):
-            beat_type = BeatType(item.get("beat_type", SHORTS_BEAT_TYPES[index % len(SHORTS_BEAT_TYPES)].value))
+            beat_type = resolve_beat_type(
+                item.get("beat_type"),
+                SHORTS_BEAT_TYPES[index % len(SHORTS_BEAT_TYPES)],
+            )
             beats.append(
                 StoryBeat(
                     beat_type=beat_type,

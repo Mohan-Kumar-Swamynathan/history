@@ -10,7 +10,7 @@ from typing import List
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
 from src.core.llm_policy import STAGE_LONG_SCRIPT, should_use_llm
-from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate
+from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_ORDER, BEAT_EMOTIONS, build_offline_long_script
 from src.script.script_validator import ScriptValidator
@@ -101,7 +101,10 @@ Return JSON array of {beat_count} objects:
         beat_data = json.loads(match.group())
         beats: List[StoryBeat] = []
         for index, item in enumerate(beat_data):
-            beat_type = BeatType(item.get("beat_type", BEAT_ORDER[index % len(BEAT_ORDER)].value))
+            beat_type = resolve_beat_type(
+                item.get("beat_type"),
+                BEAT_ORDER[index % len(BEAT_ORDER)],
+            )
             beats.append(
                 StoryBeat(
                     beat_type=beat_type,
