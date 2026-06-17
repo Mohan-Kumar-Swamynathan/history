@@ -1,0 +1,73 @@
+topics:
+  - title_ta: "1009 முறை நிராகரிக்கப்பட்ட Colonel Sanders-ன் கதை"
+    hook: "65 வயதில் அவர் எல்லாவற்றையும் இழந்தார்."
+    protagonist: "Colonel Sanders"
+    protagonist_age: "65"
+    situation: "Kentucky roadside restaurant"
+    core_problem: "1009 rejections before KFC"
+    emotional_hook: "Nobody believed because of his age"
+    turning_point: "The 1009th pitch succeeded"
+    lesson: "Failure is not the end"
+    hook_question: "65 வயதில் எல்லாம் முடிந்துவிட்டதா என்று நினைத்தவர் எப்படி பில்லியனர் ஆனார்?"
+    open_loop: "ஆனால் அடுத்து நடந்தது யாரும் எதிர்பார்க்கவில்லை..."
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "Colonel Sanders"
+    curiosity_score: 9.2
+    emotion_score: 8.8
+    story_score: 9.5
+    lesson_score: 8.5
+
+  - title_ta: "APJ Abdul Kalam — சாதாரண விற்பனையாளனின் கனவு"
+    hook: "அவர் சாதாரண குடும்பத்தில் பிறந்தார். ஆனால் இந்தியாவின் தலைவரானார்."
+    protagonist: "APJ Abdul Kalam"
+    protagonist_age: "83"
+    situation: "Rameswaram, Tamil Nadu — newspaper boy"
+    core_problem: "வறுமையில் வளர்ந்தார் ஆனால் விஞ்ஞானத்தில் கனவு கண்டார்"
+    emotional_hook: "அவர் சொன்னார் — கனவுகள் எல்லாம் சாத்தியம்"
+    turning_point: "SLV-3 வெற்றி — இந்தியாவின் ஏவுகணை திட்டம்"
+    lesson: "எங்கிருந்து தொடங்கினாலும் முடியும்"
+    hook_question: "சாதாரண paper boy எப்படி Missile Man ஆனார்?"
+    open_loop: "ஆனால் அவரின் மிகப்பெரிய திருப்புமுனை யாரும் எதிர்பார்க்கவில்லை..."
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "A. P. J. Abdul Kalam"
+    curiosity_score: 9.0
+    emotion_score: 9.2
+    story_score: 9.0
+    lesson_score: 8.8
+
+  - title_ta: "Nokia ஏன் வீழ்ந்தது?"
+    hook: "2007ல் உலகின் #1 mobile company. 2013ல் விற்கப்பட்டது."
+    protagonist: "Nokia"
+    situation: "Finland, global leader 2007"
+    core_problem: "Smartphone revolution ignored"
+    emotional_hook: "One boardroom decision"
+    turning_point: "Stuck with Symbian after iPhone"
+    lesson: "Markets change — adapt or die"
+    hook_question: "உலகின் #1 company எப்படி 6 வருடங்களில் மறைந்தது?"
+    open_loop: "ஆனால் அந்த ஒரு meeting-ல் என்ன நடந்தது?"
+    story_mode: biographical
+    content_bucket: business
+    wikipedia_subject: "Nokia"
+    curiosity_score: 9.0
+    emotion_score: 7.5
+    story_score: 9.0
+    lesson_score: 8.5
+
+  - title_ta: "₹28,000 சம்பளத்தில் அப்பாவை நம்பிக்கை வைக்க முடியாத அர்ஜுன்"
+    hook: "உன் சம்பளம் பற்றி யாராவது கேட்கும்போது நீ என்ன சொல்வாய்?"
+    protagonist: "அர்ஜுன்"
+    protagonist_age: "24"
+    situation: "Coimbatore IT, ₹28,000"
+    core_problem: "Father's expectations vs reality"
+    emotional_hook: "அப்பா கேட்டார் — மகனே உன்னால் சம்பாரிக்க முடியாதா?"
+    turning_point: "One mistake became a lesson"
+    lesson: "Your worth is not your salary"
+    hook_question: "உன் சம்பளம் பற்றி யாராவது கேட்கும்போது நீ என்ன சொல்வாய்?"
+    story_mode: composite
+    content_bucket: psychology
+    curiosity_score: 8.5
+    emotion_score: 8.7
+    story_score: 8.2
+    lesson_score: 8.0

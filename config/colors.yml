@@ -1,0 +1,53 @@
+# Emotion-based color palettes (free procedural — no external images)
+palettes:
+  sad:
+    wash: [230, 235, 250]
+    accent: [90, 120, 200]
+    icon: [70, 100, 180]
+    glow: [180, 200, 255]
+  neutral:
+    wash: [248, 248, 245]
+    accent: [80, 80, 80]
+    icon: [40, 40, 40]
+    glow: [220, 220, 215]
+  hope:
+    wash: [255, 250, 235]
+    accent: [255, 180, 50]
+    icon: [230, 140, 30]
+    glow: [255, 220, 120]
+  exciting:
+    wash: [255, 242, 235]
+    accent: [220, 60, 40]
+    icon: [205, 35, 25]
+    glow: [255, 160, 100]
+  inspirational:
+    wash: [235, 250, 240]
+    accent: [34, 140, 70]
+    icon: [28, 120, 60]
+    glow: [160, 230, 180]
+  thinking:
+    wash: [245, 240, 255]
+    accent: [120, 80, 180]
+    icon: [90, 60, 150]
+    glow: [200, 180, 255]
+
+# Keyword-matched icon accent colors
+icon_colors:
+  rupee: [255, 193, 7]
+  coins_stack: [255, 193, 7]
+  graph_up: [76, 175, 80]
+  arrow_up: [76, 175, 80]
+  heart: [233, 30, 99]
+  brain: [156, 39, 176]
+  lightbulb: [255, 235, 59]
+  clock: [63, 81, 181]
+  anxious_face: [156, 39, 176]
+  happy_face: [255, 193, 7]
+  sad_face: [90, 120, 200]
+  trophy: [255, 160, 0]
+  star: [255, 193, 7]
+  sprout: [76, 175, 80]
+  phone: [66, 165, 245]
+  bell: [255, 112, 67]
+  question_mark: [120, 120, 120]
+  default: [205, 35, 25]

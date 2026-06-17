@@ -1,0 +1,45 @@
+dedup_days: 30
+default_category: storytelling
+candidate_count: 20
+min_accept_score: 7.5
+story_mode_rotation: mixed
+
+content_mix:
+  success_failure: 0.40
+  business: 0.25
+  historical_story: 0.20
+  psychology: 0.15
+
+scoring_weights:
+  curiosity: 0.40
+  emotion: 0.25
+  story: 0.20
+  lesson: 0.15
+
+blocklist_patterns:
+  - "top 10"
+  - "top 5"
+  - "வேலை செய்யுங்கள்"
+  - "வெற்றி ரகசியம்"
+  - "motivation tips"
+  - "how to succeed"
+  - "generic motivation"
+
+script_targets:
+  long_min_words: 1000
+  long_max_words: 2000
+  long_target_words: 1400
+  long_beat_count: 24
+  long_min_words_per_beat: 30
+  shorts_min_words: 80
+  shorts_max_words: 150
+  shorts_beat_count: 5
+  shorts_min_duration_seconds: 30
+  shorts_max_duration_seconds: 60
+
+categories:
+  - storytelling
+  - success_failure
+  - business
+  - historical_story
+  - psychology

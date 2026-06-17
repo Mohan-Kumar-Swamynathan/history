@@ -1,0 +1,181 @@
+name: வரலாறு விழிப்பு — Daily Documentary
+
+on:
+  schedule:
+    - cron: "0 3 * * *"    # 08:30 IST daily
+    - cron: "30 14 * * *"  # 20:00 IST daily
+  workflow_dispatch:
+    inputs:
+      topic:
+        description: "Custom topic (blank = LLM auto-discover)"
+        required: false
+        default: ""
+      upload:
+        description: "Upload to YouTube?"
+        required: false
+        default: "yes"
+        type: choice
+        options: ["yes","no"]
+
+concurrency:
+  group: history-documentary
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  models: read
+
+env:
+  GEMINI_KEY:             ${{ secrets.GEMINI_KEY }}
+  GROQ_API_KEY:           ${{ secrets.GROQ_API_KEY }}
+  GITHUB_MODELS_TOKEN:    ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+  GITHUB_TOKEN:           ${{ secrets.GITHUB_TOKEN }}
+  PEXELS_API_KEY:         ${{ secrets.PEXELS_API_KEY }}
+  YOUTUBE_TOKEN_BASE64:   ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+  CLIENT_SECRETS_BASE64:  ${{ secrets.CLIENT_SECRETS_BASE64 }}
+  PYTHONUNBUFFERED:       "1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system deps
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            ffmpeg fonts-noto fonts-noto-extra \
+            libcairo2-dev libpango1.0-dev pkg-config python3-dev
+          echo "✅ System deps"
+
+      - name: Install Python deps
+        run: |
+          pip install --quiet \
+            edge-tts pillow requests cairosvg svgwrite \
+            opencv-python-headless numpy \
+            google-api-python-client google-auth-oauthlib google-auth-httplib2
+          echo "✅ Python deps"
+
+      - name: Setup dirs
+        run: |
+          mkdir -p /tmp/documentary/{assets,frames,audio,video,cache,scripts,maps}
+
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+            SZ=$(wc -c < youtube_token.pickle)
+            echo "✅ Token restored: ${SZ} bytes"
+          else
+            echo "⚠️  YOUTUBE_TOKEN_BASE64 not set"
+          fi
+          [ -n "$CLIENT_SECRETS_BASE64" ] && \
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+
+      - name: Run pipeline
+        run: |
+          TOPIC="${{ github.event.inputs.topic }}"
+          UPLOAD="${{ github.event.inputs.upload || 'yes' }}"  # yes by default on schedule
+
+          CMD="python3 documentary_main.py"
+          [ -n "$TOPIC" ] && CMD="$CMD --topic \"$TOPIC\""
+          [ "$UPLOAD" = "no" ] && CMD="$CMD --no-upload" || true  # default: upload
+
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "▶ $CMD"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          eval $CMD 2>&1 | tee /tmp/doc.log
+          EXIT=${PIPESTATUS[0]}
+          echo "EXIT_CODE=$EXIT" >> $GITHUB_ENV
+
+      - name: Results
+        if: always()
+        run: |
+          echo "── Videos ──────────────────────────────────"
+          ls -lh /tmp/documentary/video/*.mp4 2>/dev/null | grep -v raw || echo "None"
+          echo ""
+          echo "── Log (last 40 lines) ─────────────────────"
+          tail -40 /tmp/doc.log 2>/dev/null || true
+
+      - name: Job summary
+        if: always()
+        run: |
+          echo "## 🎬 வரலாறு விழிப்பு — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Field | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(TZ=Asia/Kolkata date +'%H:%M IST, %d %b %Y') |" >> $GITHUB_STEP_SUMMARY
+          echo "| Trigger | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          TOPIC="${{ github.event.inputs.topic }}"
+          echo "| Topic | ${TOPIC:-LLM auto-discovered} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Upload | ${{ github.event.inputs.upload || 'yes' }} |" >> $GITHUB_STEP_SUMMARY
+
+          LONG=$(ls /tmp/documentary/video/*_long.mp4 2>/dev/null | head -1 || echo "")
+          SHORTS=$(ls /tmp/documentary/video/*_shorts.mp4 2>/dev/null | head -1 || echo "")
+
+          if [ -n "$LONG" ]; then
+            SZ=$(du -sh "$LONG" | cut -f1)
+            DUR=$(ffprobe -v error -show_entries format=duration \
+                  -of default=noprint_wrappers=1:nokey=1 "$LONG" 2>/dev/null \
+                  | xargs printf "%.0fs" 2>/dev/null || echo "?")
+            echo "| Long Video | $(basename $LONG) — $SZ, $DUR |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Long Video | ❌ Not generated |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ -n "$SHORTS" ]; then
+            SZ=$(du -sh "$SHORTS" | cut -f1)
+            echo "| Shorts | $(basename $SHORTS) — $SZ |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Shorts | ❌ Not generated |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          VID_ID=$(grep "youtu.be" /tmp/doc.log | grep "long\|upload" | \
+                   grep -oP "[A-Za-z0-9_-]{11}" | head -1 || echo "")
+          SHT_ID=$(grep "youtu.be" /tmp/doc.log | grep "shorts\|Shorts" | \
+                   grep -oP "[A-Za-z0-9_-]{11}" | head -1 || echo "")
+
+          if [ -n "$VID_ID" ]; then
+            echo "| YouTube Long | [youtu.be/$VID_ID](https://youtu.be/$VID_ID) ✅ |" >> $GITHUB_STEP_SUMMARY
+          fi
+          if [ -n "$SHT_ID" ]; then
+            echo "| YouTube Shorts | [youtu.be/$SHT_ID](https://youtu.be/$SHT_ID) ✅ |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          ERRORS=$(grep "❌\|ERROR" /tmp/doc.log | wc -l)
+          if [ "$ERRORS" -gt "0" ]; then
+            echo "| Errors | $ERRORS (check logs) |" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 📥 Download artifact below to review videos before next upload" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: documentary-${{ github.run_number }}
+          path: |
+            /tmp/documentary/video/*.mp4
+            /tmp/documentary/cache/*.json
+          retention-days: 3
+          if-no-files-found: warn
+
+      - name: Commit state
+        if: success()
+        run: |
+          git config user.name "வரலாறு Bot"
+          git config user.email "bot@history.auto"
+          git add documentary_state.json upload_log.json 2>/dev/null || true
+          git diff --staged --quiet || \
+            git commit -m "run: documentary #${{ github.run_number }} — topic auto"
+          git push || true

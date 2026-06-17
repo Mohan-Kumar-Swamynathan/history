@@ -1,0 +1,141 @@
+name: துளிர் — Test Video Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      topic_idx:
+        description: "Topic index 0-14 (see list below)"
+        required: false
+        default: "2"
+
+# Topic list:
+# 0  தோல்வியை வெல்வது எப்படி?
+# 1  காலை நேரத்தை சரியாக பயன்படுத்துவது எப்படி?
+# 2  No சொல்ல தெரியாதவர்களுக்கு
+# 3  First Salary-ல் என்ன செய்யணும்?
+# 4  Toxic நண்பர்களை எப்படி identify பண்றது?
+# 5  Anxiety-ஐ எப்படி handle பண்றது?
+# 6  தினமும் படிக்கும் பழக்கம் எப்படி வரும்?
+# 7  Social Media addiction-ஐ break பண்றது எப்படி?
+# 8  Parents-கிட்ட Career பத்தி எப்படி பேசுவது?
+# 9  Comparison trap-இல் இருந்து விடுபடுவது எப்படி?
+# 10 SIP என்றால் என்ன? ₹500-ல் ஆரம்பிக்கலாம்
+# 11 தன்னம்பிக்கை எப்படி வரும்?
+# 12 Time management — எளிய Tamil guide
+# 13 உன்னை நீயே அறிவது எப்படி? Self awareness
+# 14 Emergency fund ஏன் வேணும்? எப்படி உருவாக்குவது?
+
+concurrency:
+  group: thulir-test
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  models: read
+
+env:
+  GEMINI_KEY:          ${{ secrets.GEMINI_KEY }}
+  GROQ_API_KEY:        ${{ secrets.GROQ_API_KEY }}
+  GITHUB_TOKEN:        ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_MODELS_TOKEN: ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+  PYTHONUNBUFFERED:    "1"
+
+jobs:
+  generate-test-video:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    name: "Generate துளிர் sample video (no upload)"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-noto fonts-noto-extra
+          pip install --quiet edge-tts pillow requests             google-api-python-client google-auth-oauthlib google-auth-httplib2
+
+      - name: Verify tools
+        run: |
+          ffmpeg -version | head -1
+          python3 -c "import edge_tts, PIL; print('✅ edge_tts + PIL ready')"
+          echo "Tamil fonts:"
+          fc-list | grep -i "NotoSansTamil" | head -3 || echo "Checking..."
+          ls /usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf && echo "✅ Tamil font ready"
+
+      - name: List available topics
+        run: python3 thulir_bot.py --list-topics
+
+      - name: Generate video (skip upload)
+        run: |
+          IDX="${{ github.event.inputs.topic_idx || '2' }}"
+          echo "▶ Generating topic index: $IDX"
+          python3 thulir_bot.py --topic-idx "$IDX" --skip-upload 2>&1 | tee /tmp/thulir.log
+          echo "EXIT_CODE=$?" >> $GITHUB_ENV
+
+      - name: Show results summary
+        if: always()
+        run: |
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "🌱 THULIR TEST VIDEO — RESULTS"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo ""
+          echo "📹 Videos generated:"
+          ls -lh thulir/videos/*.mp4 2>/dev/null || echo "  (none)"
+          echo ""
+          echo "🖼️  Thumbnails generated:"
+          ls -lh thulir/thumbnails/*.jpg 2>/dev/null || echo "  (none)"
+          echo ""
+          echo "📝 Scripts generated:"
+          ls -lh thulir/scripts/*.txt 2>/dev/null || echo "  (none)"
+          echo ""
+          echo "📋 Last 30 lines of log:"
+          tail -30 /tmp/thulir.log 2>/dev/null || true
+
+      - name: Write job summary
+        if: always()
+        run: |
+          echo "## 🌱 துளிர் Test Video — Run #${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Item | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Topic index | ${{ github.event.inputs.topic_idx || '2' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Time | $(TZ=Asia/Kolkata date +'%H:%M IST %d-%m-%Y') |" >> $GITHUB_STEP_SUMMARY
+          if ls thulir/videos/*.mp4 2>/dev/null | head -1 | grep -q mp4; then
+            VID=$(ls thulir/videos/*.mp4 | head -1)
+            SIZE=$(du -sh "$VID" | cut -f1)
+            echo "| Video | $VID ($SIZE) |" >> $GITHUB_STEP_SUMMARY
+            TOPIC=$(python3 -c "import json,glob; f=glob.glob('thulir/*.json'); d=json.load(open(f[0])); print(d.get('topic',''))" 2>/dev/null || echo "—")
+            echo "| Topic | $TOPIC |" >> $GITHUB_STEP_SUMMARY
+            echo "| Status | ✅ Success — download artifact below |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| Status | ❌ No video generated — check logs |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "> 📥 **Download the video from the Artifacts section below to review before uploading to YouTube.**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload video artifact for review
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: thulir-test-video-${{ github.run_number }}
+          path: |
+            thulir_enterprise/videos/*.mp4
+            thulir_enterprise/thumbnails/*.jpg
+            thulir_enterprise/scripts/*.txt
+            thulir_enterprise/*.json
+          retention-days: 3
+          if-no-files-found: warn
+
+      - name: Commit state update
+        if: success()
+        run: |
+          git config user.name  "துளிர் Bot"
+          git config user.email "bot@thulir.auto"
+          git add thulir/thulir_state.json thulir/cache/ thulir/scripts/ 2>/dev/null || true
+          git diff --staged --quiet ||             git commit -m "test: thulir sample #${{ github.run_number }} topic-idx=${{ github.event.inputs.topic_idx || '2' }}"
+          git push || true

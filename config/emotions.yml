@@ -1,0 +1,43 @@
+sad:
+  camera_speed: 0.6
+  animation_speed: 0.7
+  bgm_volume: 0.06
+  background_tone: muted
+  figure_emotion: sad
+
+neutral:
+  camera_speed: 1.0
+  animation_speed: 1.0
+  bgm_volume: 0.08
+  background_tone: default
+  figure_emotion: neutral
+
+hope:
+  camera_speed: 1.1
+  animation_speed: 1.1
+  bgm_volume: 0.08
+  background_tone: bright
+  figure_emotion: happy
+
+exciting:
+  camera_speed: 1.3
+  animation_speed: 1.4
+  bgm_volume: 0.10
+  background_tone: high_contrast
+  figure_emotion: celebrating
+  camera_motion: zoom_in
+  transition: push
+
+inspirational:
+  camera_speed: 1.2
+  animation_speed: 1.2
+  bgm_volume: 0.09
+  background_tone: bright
+  figure_emotion: celebrating
+
+thinking:
+  camera_speed: 0.9
+  animation_speed: 0.9
+  bgm_volume: 0.07
+  background_tone: default
+  figure_emotion: thinking

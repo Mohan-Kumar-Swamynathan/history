@@ -1,0 +1,30 @@
+free_only: true
+language: ta
+voice: ta-IN-ValluvarNeural
+subtitle_language: ta
+output_dir: output
+
+video:
+  width: 1920
+  height: 1080
+  fps: 24
+  shorts_width: 1080
+  shorts_height: 1920
+  long_target_minutes_min: 8
+  long_target_minutes_max: 12
+
+channel:
+  name: "துளிர்"
+  tagline: "Growth through stories"
+  positioning: "Real Stories. Real People. Real Events. Real Lessons."
+  style_reference: almost_everything
+  default_category: storytelling
+  visual_style_default: whiteboard
+
+fonts:
+  ta_black: "/System/Library/Fonts/Supplemental/Tamil MN.ttc"
+  ta_bold: "/System/Library/Fonts/Supplemental/Tamil Sangam MN.ttc"
+  en_black: "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+  en_bold: "/System/Library/Fonts/Supplemental/Arial Bold.ttf"
+  linux_ta_black: "/usr/share/fonts/truetype/noto/NotoSansTamil-Black.ttf"
+  linux_en_black: "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf"

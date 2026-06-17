@@ -1,0 +1,6 @@
+provider: edge_tts
+default_voice: ta-IN-ValluvarNeural
+female_voice: ta-IN-PallaviNeural
+rate: "+0%"
+pitch: "+0Hz"
+pause_between_beats_ms: 400

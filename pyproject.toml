@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thulir-video-platform"
+version = "1.0.0"
+description = "Tamil inspiration YouTube automation — Almost Everything style"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "edge-tts>=6.1.9",
+    "pillow>=10.0.0",
+    "requests>=2.31.0",
+    "google-api-python-client>=2.100.0",
+    "google-auth-oauthlib>=1.1.0",
+    "google-auth-httplib2>=0.2.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "pyyaml>=6.0.1",
+    "numpy>=1.26.0",
+    "cairosvg>=2.7.0",
+    "opencv-python-headless>=4.8.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4.0", "pytest-asyncio>=0.23.0"]
+
+[project.scripts]
+generate-video = "generate_video:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

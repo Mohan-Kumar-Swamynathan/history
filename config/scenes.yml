@@ -1,0 +1,29 @@
+whiteboard:
+  background: white
+  ink_color: [20, 20, 20]
+  highlight_color: [205, 35, 25]
+  transition: crossfade
+  words_per_second: 2.2
+
+scene_types:
+  character:
+    visual_style: whiteboard
+    requires: [protagonist, emotion]
+  quote:
+    visual_style: whiteboard
+    requires: [text]
+  statistic:
+    visual_style: documentary
+    requires: [value]
+  timeline:
+    visual_style: documentary
+    requires: [dates]
+  map:
+    visual_style: documentary
+    requires: [location]
+  comparison:
+    visual_style: whiteboard
+    requires: [before, after]
+  diagram:
+    visual_style: whiteboard
+    requires: [steps]

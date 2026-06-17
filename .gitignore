@@ -1,0 +1,30 @@
+# Generated media (large files — download from GitHub Actions artifacts)
+videos/
+audio/
+bgm/
+output/
+
+# Caches
+cache/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# Secrets
+*.env
+.env*
+*token*.pickle
+*client_secrets*.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Keep these tracked:
+# scripts/   — text scripts (small, useful for review)
+# thumbnails/ — JPG thumbnails (small)
+# scheduler_state.json — rotation state
+# optimal_schedule.json — schedule output
