@@ -52,4 +52,21 @@ def render_documentary_scene(
             rgb_frames.append(frame[:, :, ::-1].copy())
         else:
             rgb_frames.append(frame)
-    return rgb_frames
+    return _resize_frames_to_canvas(rgb_frames)
+
+
+def _resize_frames_to_canvas(frames: List[np.ndarray]) -> List[np.ndarray]:
+    import ae_engine
+
+    target_width, target_height = ae_engine.W, ae_engine.H
+    resized: List[np.ndarray] = []
+    for frame in frames:
+        if frame.shape[0] == target_height and frame.shape[1] == target_width:
+            resized.append(frame)
+            continue
+        from PIL import Image
+
+        pil_frame = Image.fromarray(frame)
+        pil_frame = pil_frame.resize((target_width, target_height), Image.LANCZOS)
+        resized.append(np.array(pil_frame))
+    return resized

@@ -75,7 +75,7 @@ Return JSON array of {count} objects:
 "curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}]"""
 
         raw = generate_text(prompt, max_tokens=8000)
-        candidates = self._parse_candidate_array(raw)
+        candidates = _parse_candidate_array(raw)
         return [self._normalize_candidate(item) for item in candidates if item]
 
     def score_and_select(self, candidates: List[TopicCandidate]) -> TopicCandidate:

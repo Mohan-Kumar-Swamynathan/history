@@ -173,13 +173,20 @@ class AnimationEngine:
         if blend_count < 2:
             return frames_a + frames_b
         blended: List[np.ndarray] = []
+        target_height, target_width = frames_a[0].shape[0], frames_a[0].shape[1]
         for index in range(blend_count):
             blend_ratio = index / max(blend_count - 1, 1)
             pil_a = Image.fromarray(frames_a[-(blend_count - index)])
-            pil_b = Image.fromarray(frames_b[index])
+            pil_b = Image.fromarray(self._resize_frame_array(frames_b[index], target_width, target_height))
             merged = crossfade(pil_a, pil_b, blend_ratio)
             blended.append(np.array(merged))
         return frames_a[:-blend_count] + blended + frames_b[blend_count:]
+
+    def _resize_frame_array(self, frame: np.ndarray, width: int, height: int) -> np.ndarray:
+        if frame.shape[0] == height and frame.shape[1] == width:
+            return frame
+        pil_frame = Image.fromarray(frame)
+        return np.array(pil_frame.resize((width, height), Image.LANCZOS))
 
     def _apply_push_transition(
         self,
