@@ -138,6 +138,7 @@ class VoiceEngine:
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-f", "concat", "-safe", "0",
                 "-i", str(concat_list),
+                "-af", "aresample=44100,aformat=sample_fmts=s16:channel_layouts=mono",
                 "-c:a", "libmp3lame", "-b:a", "192k",
                 str(output_path),
             ],

@@ -15,7 +15,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.animation_engine.animation_engine import AnimationEngine
 from src.core.config_loader import load_emotions_config, load_platform_config, load_topics_config
-from src.core.models import BeatAudioSegment, NarrationBundle, ScenePlan, ShortsScript, WordTiming
+from src.core.models import BeatAudioSegment, NarrationBundle, NarrativeScript, ScenePlan, ShortsScript, WordTiming
 from src.renderer.bgm_generator import generate_bgm
 from src.renderer.video_renderer import VideoRenderer
 from src.research.research_collector import ResearchCollector

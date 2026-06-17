@@ -13,32 +13,55 @@ from typing import Dict
 log = logging.getLogger(__name__)
 
 STATE_FILE = Path(__file__).parent / "upload_state.json"
+PROJECT_ROOT = Path(__file__).parent
 YOUTUBE_SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 YOUTUBE_CATEGORY_EDUCATION = "27"
 
+LOCAL_TOKEN_PATHS = (
+    PROJECT_ROOT / "youtube_token.pickle",
+    PROJECT_ROOT / "token.json",
+)
 
-def _load_credentials_from_token():
+
+def _load_credentials_from_bytes(token_bytes: bytes):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials
 
-    raw = os.environ.get("YOUTUBE_TOKEN_BASE64", "")
-    if not raw:
-        raise RuntimeError("YOUTUBE_TOKEN_BASE64 not set")
-
-    token_bytes = base64.b64decode(raw)
+    creds = None
     try:
         creds = pickle.loads(token_bytes)
-        if hasattr(creds, "refresh") and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        return creds
     except Exception:
-        pass
+        try:
+            token_info = json.loads(token_bytes.decode("utf-8"))
+            creds = Credentials.from_authorized_user_info(token_info, YOUTUBE_SCOPES)
+        except Exception as exc:
+            raise RuntimeError("YouTube token is not valid pickle or JSON credentials") from exc
 
-    token_info = json.loads(token_bytes.decode("utf-8"))
-    creds = Credentials.from_authorized_user_info(token_info, YOUTUBE_SCOPES)
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
+    if hasattr(creds, "refresh") and creds.expired and creds.refresh_token:
+        try:
+            creds.refresh(Request())
+        except Exception as exc:
+            raise RuntimeError(
+                "YouTube token expired and refresh failed. Re-run "
+                "scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64."
+            ) from exc
     return creds
+
+
+def _load_credentials_from_token():
+    raw = os.environ.get("YOUTUBE_TOKEN_BASE64", "")
+    if raw:
+        return _load_credentials_from_bytes(base64.b64decode(raw))
+
+    for token_path in LOCAL_TOKEN_PATHS:
+        if token_path.exists():
+            log.info("Loading YouTube credentials from %s", token_path.name)
+            return _load_credentials_from_bytes(token_path.read_bytes())
+
+    raise RuntimeError(
+        "YouTube credentials not found. Set YOUTUBE_TOKEN_BASE64 or place "
+        "youtube_token.pickle / token.json in the project root."
+    )
 
 
 def _build_youtube_service():

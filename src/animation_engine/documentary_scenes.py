@@ -32,7 +32,9 @@ def render_documentary_scene(
         number = numbers[0] if numbers else "100"
         frames = render_stat_frames(number, "", total_frames, bg_color=(255, 255, 255))
     elif scene_type == SceneType.TIMELINE:
-        dates = re.findall(r"\b(19|20)\d{2}\b", text) or scene_plan.beat.entities.get("dates", ["2020"])
+        dates = re.findall(r"\b(1[89]\d{2}|20\d{2})\b", text)
+        entity_dates = scene_plan.beat.entities.get("dates") or []
+        dates = dates or entity_dates or ["2020", "2024"]
         frames = render_timeline_frames(str(dates[0]), [str(d) for d in dates], total_frames)
     elif scene_type == SceneType.MAP:
         location = "India"

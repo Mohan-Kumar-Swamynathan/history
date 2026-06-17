@@ -51,6 +51,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
           pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
       - name: Generate morning long video
         run: |
           python generate_video.py --format long --daily-slot morning_long --upload
@@ -73,6 +81,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
           pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
       - name: Generate morning short
         run: |
           python generate_video.py --format short --daily-slot morning_short --upload
@@ -95,6 +111,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
           pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
       - name: Generate evening long video
         run: |
           python generate_video.py --format long --daily-slot evening_long --no-shorts --upload
@@ -117,6 +141,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
           pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
       - name: Generate evening short
         run: |
           python generate_video.py --format short --daily-slot evening_short --upload
