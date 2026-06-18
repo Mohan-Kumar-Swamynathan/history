@@ -52,51 +52,6 @@ env:
   LLM_MODE:              hybrid
   LLM_CI_STRATEGY:       github_first
 
-# ── Shared step template (YAML anchor) ───────────────────────────────
-x-common-steps: &common-steps
-  - uses: actions/checkout@v4
-
-  - uses: actions/setup-python@v5
-    with:
-      python-version: "3.11"
-
-  - name: Install system dependencies
-    run: |
-      sudo apt-get update -qq
-      sudo apt-get install -y --no-install-recommends \
-        ffmpeg \
-        libcairo2-dev \
-        libpango1.0-dev \
-        fonts-noto \
-        fonts-noto-core \
-        fonts-noto-extra
-      pip install --upgrade pip
-      pip install -r requirements.txt
-
-  - name: Restore YouTube credentials
-    run: |
-      if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
-        echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
-        echo "✅ youtube_token.pickle restored"
-      fi
-      if [ -n "$CLIENT_SECRETS_BASE64" ]; then
-        echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
-        echo "✅ client_secrets.json restored"
-      fi
-
-  - name: Persist topic history
-    if: always()
-    run: |
-      git config user.name  "Thulir Bot"
-      git config user.email "bot@thulir.local"
-      git add \
-        data/topic_history.json \
-        upload_state.json \
-        output/state/ \
-        2>/dev/null || true
-      git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
-      git push || true
-
 jobs:
   # ── Morning upload (07:00 IST) ──────────────────────────────────────
   morning_bundle:
