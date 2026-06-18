@@ -113,11 +113,14 @@ class VideoPipeline:
         hook_frame = None
         scene_tail: List = []
         raw_video_path = run_dir / "raw_video.mp4"
+        # CI render optimisation: render at half FPS, FFmpeg duplication gives
+        # same motion smoothness after YouTube re-encoding. Cuts Python render ~50%.
+        render_fps = max(12, self.animation_engine.fps // 2)
         frame_encoder = FrameStreamEncoder(
             raw_video_path,
             self.animation_engine.width,
             self.animation_engine.height,
-            self.animation_engine.fps,
+            render_fps,
         )
         all_word_timings: List[WordTiming] = narration_bundle.all_word_timings
 
@@ -132,6 +135,7 @@ class VideoPipeline:
                 len(scene_plans),
                 word_timings=segment.word_timings,
                 duration_seconds=scene_plan.beat.duration_seconds,
+                fps_override=render_fps,
             )
             if hook_frame is None and scene_frames:
                 hook_index = min(len(scene_frames) - 1, int(len(scene_frames) * 0.8))
