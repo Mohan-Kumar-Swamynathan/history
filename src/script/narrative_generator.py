@@ -77,6 +77,7 @@ class NarrativeGenerator:
         if feedback:
             feedback_text = f"\nFix these validation errors: {'; '.join(feedback)}"
 
+        # ── v2 prompt: no greeting opener, strong hook required ────────
         prompt = f"""நீங்கள் "துளிர்" Tamil storytelling YouTube channel-க்கு script எழுதுகிறீர்கள்.
 Style: Almost Everything — real story, 3rd person, emotional journey. NOT motivation speech. NOT fact list.
 
@@ -96,10 +97,17 @@ RULES:
 - Exactly {beat_count} beats in this order (repeat cycle): hook, context, conflict, escalation, turning_point, resolution, lesson, cta
 - Each beat MUST be {min_per_beat}-70 Tamil words with specific numbers, dialogue, places
 - Include protagonist name "{topic.protagonist}" and at least 3 numbers/dates across script
-- 3rd person narration. No preaching. Story is the topic, lesson is the reward
-- Beat 1 opens with: "வணக்கம்! துளிர் channel..."
-- Final beat asks viewer to like, share, subscribe, and hit the bell
-- Beat 2 must contain open loop
+- 3rd person narration. No preaching. Story is the lesson — viewer discovers it.
+
+HOOK BEAT (beat 1) — CRITICAL:
+- Do NOT start with "வணக்கம்", "நமஸ்காரம்", "துளிர் channel", or any greeting.
+- Drop the viewer INTO the story. Start mid-scene or mid-action.
+- Options: a specific number, a moment of failure, a dialogue line, a shocking fact.
+- Good example: "1009 முறை நிராகரிக்கப்பட்டார். ஆனால் {topic.protagonist} விட்டுக்கொடுக்கவில்லை."
+- Bad example: "வணக்கம்! இன்று நாம் ஒரு சுவாரஸ்யமான கதையைப் பார்க்கப் போகிறோம்..."
+
+- Beat 2 must contain open loop: "{topic.open_loop}"
+- Final beat asks viewer to like, share, subscribe, and hit the bell — but naturally, as part of the story's close.
 {feedback_text}
 
 Return JSON array of exactly {beat_count} objects:
@@ -117,8 +125,17 @@ Return ONLY the JSON array. No markdown fences."""
         beats = self._parse_beats(raw, topic)
         if not beats:
             raise ValueError("No beat array in LLM response")
+
+        # Only prepend hook if LLM didn't write a strong opener
         beats[0] = beats[0].model_copy(
-            update={"narration_ta": prepend_greeting(beats[0].narration_ta)}
+            update={
+                "narration_ta": prepend_greeting(
+                    beats[0].narration_ta,
+                    is_shorts=False,
+                    protagonist=topic.protagonist,
+                    protagonist_age=topic.protagonist_age,
+                )
+            }
         )
         beats[-1] = beats[-1].model_copy(
             update={"narration_ta": append_outro_cta(beats[-1].narration_ta)}
