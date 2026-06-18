@@ -12,7 +12,7 @@ import yaml
 
 from src.core.config_loader import CONFIG_DIR, get_output_dir, load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_json_parser import extract_json_array
+from src.core.llm_json_parser import extract_json_array, extract_json_object
 from src.core.llm_policy import (
     STAGE_TOPIC,
     max_tokens_for_stage,
@@ -43,11 +43,19 @@ class TopicScorer:
 
         if has_llm_credentials() and should_use_llm(STAGE_TOPIC):
             try:
-                return self._discover_with_llm(target_bucket, used_titles)
+                selected = self._discover_with_llm(target_bucket, used_titles)
+                log.info(
+                    "Topic selected via %s: %s",
+                    selected.source,
+                    selected.title_ta[:60],
+                )
+                return selected
             except Exception as exc:
                 log.warning("LLM topic discovery failed: %s — using offline topic", exc)
 
-        return self._pick_offline_topic(target_bucket, used_titles)
+        offline = self._pick_offline_topic(target_bucket, used_titles)
+        log.info("Topic selected via offline: %s", offline.title_ta[:60])
+        return offline
 
     def generate_candidates(
         self,
@@ -90,11 +98,15 @@ Return JSON array of {count} objects:
             max_tokens=max_tokens_for_stage(STAGE_TOPIC, 1500),
             preferred=preferred_provider_for_stage(STAGE_TOPIC),
         )
-        candidates = [self._normalize_candidate(item) for item in extract_json_array(raw) if item]
+        candidates = self._parse_topic_candidates(raw, content_bucket, story_mode)
         if candidates:
             return candidates
 
-        log.warning("Topic JSON parse failed — retrying with compact GitHub-friendly prompt")
+        log.warning(
+            "Topic JSON parse failed (first 300 chars): %s",
+            raw[:300].replace("\n", " "),
+        )
+        log.warning("Retrying topic discovery with compact GitHub-friendly prompt")
         compact_prompt = self._build_compact_topic_prompt(content_bucket, count, story_mode)
         retry_provider = preferred_provider_for_stage(STAGE_TOPIC) or "github"
         raw = generate_text(
@@ -102,7 +114,48 @@ Return JSON array of {count} objects:
             max_tokens=1200,
             preferred=retry_provider,
         )
-        return [self._normalize_candidate(item) for item in extract_json_array(raw) if item]
+        candidates = self._parse_topic_candidates(raw, content_bucket, story_mode)
+        if candidates:
+            return candidates
+
+        log.warning("Compact topic parse failed — requesting single topic object")
+        single_prompt = self._build_single_topic_prompt(content_bucket, story_mode)
+        raw = generate_text(
+            single_prompt,
+            max_tokens=800,
+            preferred=retry_provider,
+        )
+        single = extract_json_object(raw)
+        if single:
+            return [self._normalize_candidate(single, content_bucket, story_mode)]
+        return []
+
+    def _parse_topic_candidates(
+        self,
+        raw: str,
+        content_bucket: ContentBucket,
+        story_mode: StoryMode,
+    ) -> List[TopicCandidate]:
+        items = extract_json_array(raw)
+        return [
+            self._normalize_candidate(item, content_bucket, story_mode)
+            for item in items
+            if item
+        ]
+
+    def _build_single_topic_prompt(
+        self,
+        content_bucket: ContentBucket,
+        story_mode: StoryMode,
+    ) -> str:
+        bucket_label = content_bucket.value
+        return f"""Return exactly ONE JSON object. No markdown. No array. No explanation.
+Tamil YouTube story topic for Thulir channel.
+bucket={bucket_label}, mode={story_mode.value}
+Avoid used topics:
+{self.deduplicator.recent_avoid_list(8)}
+
+{{"title_ta":"...","hook":"...","protagonist":"...","protagonist_age":"...","situation":"...","core_problem":"...","emotional_hook":"...","turning_point":"...","lesson":"...","hook_question":"...","open_loop":"...","story_mode":"{story_mode.value}","content_bucket":"{bucket_label}","wikipedia_subject":"","curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}"""
 
     def _build_compact_topic_prompt(
         self,
@@ -181,11 +234,11 @@ Avoid these used topics:
         return StoryMode.COMPOSITE
 
     def _pick_offline_topic(self, bucket: ContentBucket, used_titles: List[str]) -> TopicCandidate:
-        pool = self._offline_candidate_pool(bucket, used_titles)
-        if not pool:
-            pool = self._load_fallback_topics_from_yaml()
-        available = [topic for topic in pool if not self.deduplicator.is_duplicate(topic)] or pool
-        chosen = random.choice(available)
+        all_topics = self._load_fallback_topics_from_yaml()
+        available = [topic for topic in all_topics if not self.deduplicator.is_duplicate(topic)]
+        bucket_topics = [topic for topic in available if topic.content_bucket == bucket]
+        pool = bucket_topics or available or all_topics
+        chosen = random.choice(pool)
         return chosen.model_copy(update={"source": "offline"})
 
     def _offline_candidate_pool(self, bucket: ContentBucket, used_titles: List[str]) -> List[TopicCandidate]:
@@ -214,13 +267,28 @@ Avoid these used topics:
                 return True
         return False
 
-    def _normalize_candidate(self, data: dict) -> TopicCandidate:
-        return _dict_to_topic_candidate(data, source="llm")
+    def _normalize_candidate(
+        self,
+        data: dict,
+        default_bucket: ContentBucket | None = None,
+        default_mode: StoryMode | None = None,
+    ) -> TopicCandidate:
+        return _dict_to_topic_candidate(
+            data,
+            source="llm",
+            default_bucket=default_bucket,
+            default_mode=default_mode,
+        )
 
 
-def _dict_to_topic_candidate(data: dict, source: str) -> TopicCandidate:
-    bucket_raw = data.get("content_bucket", "success_failure")
-    mode_raw = data.get("story_mode", "composite")
+def _dict_to_topic_candidate(
+    data: dict,
+    source: str,
+    default_bucket: ContentBucket | None = None,
+    default_mode: StoryMode | None = None,
+) -> TopicCandidate:
+    bucket_raw = data.get("content_bucket") or (default_bucket.value if default_bucket else "success_failure")
+    mode_raw = data.get("story_mode") or (default_mode.value if default_mode else "composite")
     try:
         bucket = ContentBucket(bucket_raw)
     except ValueError:

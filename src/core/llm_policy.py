@@ -63,7 +63,8 @@ def max_tokens_for_stage(stage: str, fallback: int = 4096) -> int:
 
 
 def active_llm_stages() -> list[str]:
-    return [stage for stage in HYBRID_LLM_STAGES if should_use_llm(stage)]
+    stage_order = [STAGE_TOPIC, STAGE_LONG_SCRIPT]
+    return [stage for stage in stage_order if should_use_llm(stage)]
 
 
 def preferred_provider_for_stage(stage: str) -> str | None:

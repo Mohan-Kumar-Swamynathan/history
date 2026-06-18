@@ -323,6 +323,24 @@ def test_extract_json_array_handles_markdown_fence():
     assert parsed[0]["protagonist"] == "Hero"
 
 
+def test_extract_json_array_handles_wrapped_object():
+    from src.core.llm_json_parser import extract_json_array
+
+    raw = """{"topics":[{"title_ta":"Test","protagonist":"Hero","curiosity_score":8}]}"""
+    parsed = extract_json_array(raw)
+    assert len(parsed) == 1
+    assert parsed[0]["protagonist"] == "Hero"
+
+
+def test_extract_json_object_single_topic():
+    from src.core.llm_json_parser import extract_json_object
+
+    raw = 'Sure! {"title_ta":"கதை","protagonist":"ரவி","curiosity_score":8.5}'
+    parsed = extract_json_object(raw)
+    assert parsed is not None
+    assert parsed["protagonist"] == "ரவி"
+
+
 def test_story_mode_enum_values():
     assert StoryMode.BIOGRAPHICAL.value == "biographical"
     assert ContentBucket.BUSINESS.value == "business"
