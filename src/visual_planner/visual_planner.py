@@ -62,19 +62,30 @@ class VisualPlanner:
         )
 
     def _detect_scene_type(self, beat: StoryBeat, research: ResearchBrief) -> SceneType:
+        """Detect scene type — conservative: only use STATISTIC/TIMELINE for
+        dedicated data beats, not every beat that happens to contain a number.
+        Story beats (hook/conflict/resolution etc.) stay as CHARACTER so the
+        whiteboard animation renders instead of the big isolated number."""
+        import re
         text = beat.narration_ta
-        if beat.entities.get("numbers"):
+
+        # STATISTIC only when the beat is primarily about a stat/count —
+        # i.e. numbers are the main subject, not just incidental mentions.
+        numbers = beat.entities.get("numbers", [])
+        is_stat_beat = (
+            beat.beat_type.value in ("context", "lesson")
+            and len(numbers) >= 2
+            and not any(kw in text for kw in ["அவர்", "அவள்", "நடந்தது", "சொன்னார்"])
+        )
+        if is_stat_beat:
             return SceneType.STATISTIC
-        if beat.entities.get("dates") or research.dates:
+
+        # TIMELINE only when dates are the focus (years explicitly mentioned)
+        years = re.findall(r"\b(1[89]\d{2}|20\d{2})\b", text)
+        if len(years) >= 2 and beat.beat_type.value in ("context", "hook"):
             return SceneType.TIMELINE
-        if beat.entities.get("locations") or research.locations:
-            return SceneType.MAP
-        if "?" in text or '"' in text:
-            return SceneType.QUOTE
-        if "முன்" in text and "பின்" in text:
-            return SceneType.COMPARISON
-        if "படி" in text or "வழி" in text:
-            return SceneType.DIAGRAM
+
+        # Everything else: CHARACTER (whiteboard) — keeps visuals story-driven
         return SceneType.CHARACTER
 
     def _build_assets(self, beat: StoryBeat, research: ResearchBrief, scene_type: SceneType) -> List[str]:
