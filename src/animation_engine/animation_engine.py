@@ -203,6 +203,119 @@ class AnimationEngine:
             return 1
         return min(visible, total_words)
 
+    def plan_scene_stream_chunks(
+        self,
+        previous_tail: List[np.ndarray],
+        scene_frames: List[np.ndarray],
+        blend_frames: int,
+        transition: str,
+        is_first_scene: bool,
+        is_last_scene: bool,
+    ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        if not scene_frames:
+            return [], list(previous_tail)
+
+        if is_first_scene:
+            if is_last_scene:
+                return list(scene_frames), []
+            return self._split_scene_tail(scene_frames, blend_frames)
+
+        blend_count = min(blend_frames, len(previous_tail), len(scene_frames))
+        if blend_count < 2:
+            if is_last_scene:
+                return list(scene_frames), []
+            return self._split_scene_tail(scene_frames, blend_frames)
+
+        blended = self._build_blend_frames(
+            previous_tail,
+            scene_frames,
+            blend_count,
+            transition,
+        )
+        if is_last_scene:
+            return blended + list(scene_frames[blend_count:]), []
+
+        keep_count = min(blend_frames, len(scene_frames))
+        if len(scene_frames) <= blend_count + keep_count:
+            return blended + list(scene_frames[blend_count:]), []
+
+        to_write = blended + list(scene_frames[blend_count:-keep_count])
+        return to_write, list(scene_frames[-keep_count:])
+
+    def _split_scene_tail(
+        self,
+        scene_frames: List[np.ndarray],
+        blend_frames: int,
+    ) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+        keep_count = min(blend_frames, len(scene_frames))
+        if keep_count <= 0 or len(scene_frames) <= keep_count:
+            return [], list(scene_frames)
+        return list(scene_frames[:-keep_count]), list(scene_frames[-keep_count:])
+
+    def _build_blend_frames(
+        self,
+        tail_frames: List[np.ndarray],
+        scene_frames: List[np.ndarray],
+        blend_count: int,
+        transition: str,
+    ) -> List[np.ndarray]:
+        if transition == "push":
+            return self._build_push_blend(tail_frames, scene_frames, blend_count)
+        if transition == "wipe":
+            return self._build_wipe_blend(tail_frames, scene_frames, blend_count)
+
+        blended: List[np.ndarray] = []
+        target_height, target_width = tail_frames[0].shape[0], tail_frames[0].shape[1]
+        for index in range(blend_count):
+            blend_ratio = index / max(blend_count - 1, 1)
+            pil_a = Image.fromarray(tail_frames[-(blend_count - index)])
+            pil_b = Image.fromarray(
+                self._resize_frame_array(scene_frames[index], target_width, target_height)
+            )
+            merged = crossfade(pil_a, pil_b, blend_ratio)
+            blended.append(np.array(merged))
+        return blended
+
+    def _build_push_blend(
+        self,
+        tail_frames: List[np.ndarray],
+        scene_frames: List[np.ndarray],
+        blend_count: int,
+    ) -> List[np.ndarray]:
+        width = tail_frames[0].shape[1]
+        pushed: List[np.ndarray] = []
+        for index in range(blend_count):
+            t = index / max(blend_count - 1, 1)
+            offset = int(width * t)
+            canvas = Image.new("RGB", (width, tail_frames[0].shape[0]), (255, 255, 255))
+            frame_a = Image.fromarray(tail_frames[-(blend_count - index)])
+            frame_b = Image.fromarray(scene_frames[index])
+            canvas.paste(frame_a, (-offset, 0))
+            canvas.paste(frame_b, (width - offset, 0))
+            pushed.append(np.array(canvas))
+        return pushed
+
+    def _build_wipe_blend(
+        self,
+        tail_frames: List[np.ndarray],
+        scene_frames: List[np.ndarray],
+        blend_count: int,
+    ) -> List[np.ndarray]:
+        width = tail_frames[0].shape[1]
+        height = tail_frames[0].shape[0]
+        wiped: List[np.ndarray] = []
+        for index in range(blend_count):
+            t = index / max(blend_count - 1, 1)
+            split_x = int(width * t)
+            canvas = Image.new("RGB", (width, height), (255, 255, 255))
+            frame_a = Image.fromarray(tail_frames[-(blend_count - index)])
+            frame_b = Image.fromarray(self._resize_frame_array(scene_frames[index], width, height))
+            canvas.paste(frame_a, (0, 0))
+            if split_x > 0:
+                canvas.paste(frame_b.crop((0, 0, split_x, height)), (0, 0))
+            wiped.append(np.array(canvas))
+        return wiped
+
     def apply_crossfade(
         self,
         frames_a: List[np.ndarray],

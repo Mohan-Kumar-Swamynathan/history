@@ -17,6 +17,7 @@ from src.animation_engine.animation_engine import AnimationEngine
 from src.core.config_loader import load_emotions_config, load_platform_config, load_topics_config
 from src.core.models import BeatAudioSegment, NarrationBundle, NarrativeScript, ResearchBrief, ScenePlan, ShortsScript, WordTiming
 from src.renderer.bgm_generator import generate_bgm
+from src.renderer.frame_stream_encoder import FrameStreamEncoder
 from src.renderer.video_renderer import VideoRenderer
 from src.research.research_collector import ResearchCollector
 from src.storyboard.story_beat_extractor import StoryBeatExtractor
@@ -63,31 +64,46 @@ class ShortsRenderer:
         beats = self._apply_audio_durations(beats, narration_bundle.segments)
         scene_plans = self.visual_planner.plan_scenes(beats, research)
 
-        all_frames: List[np.ndarray] = []
+        raw_path = run_dir / "shorts_raw.mp4"
+        frame_encoder = FrameStreamEncoder(
+            raw_path,
+            self.shorts_width,
+            self.shorts_height,
+            self.fps,
+        )
+        scene_tail: List[np.ndarray] = []
         for index, scene_plan in enumerate(scene_plans):
             segment = narration_bundle.segments[index]
             frames = self._render_shorts_scene(scene_plan, segment, segment.word_timings)
-            if all_frames:
-                all_frames = self.animation_engine.apply_crossfade(
-                    all_frames, frames, blend_frames=8, transition="crossfade"
-                )
-            else:
-                all_frames.extend(frames)
+            frames_to_write, scene_tail = self.animation_engine.plan_scene_stream_chunks(
+                scene_tail,
+                frames,
+                blend_frames=8,
+                transition="crossfade",
+                is_first_scene=index == 0,
+                is_last_scene=index == len(scene_plans) - 1,
+            )
+            frame_encoder.write_frames(frames_to_write)
 
-        if not all_frames:
+        if frame_encoder.frame_count == 0:
             return None
 
         duration = narration_bundle.total_duration_seconds
         if duration < min_duration:
-            all_frames = self._pad_frames(all_frames, min_duration, duration)
+            pad_frames = int((min_duration - duration) * self.fps)
+            if pad_frames > 0 and scene_tail:
+                frame_encoder.write_frames([scene_tail[-1].copy() for _ in range(pad_frames)])
             duration = min_duration
         elif duration > max_duration:
-            max_frames = int(max_duration * self.fps)
-            all_frames = all_frames[:max_frames]
+            # Re-encode trimmed output below via aligned duration in mux path.
             duration = max_duration
 
-        raw_path = run_dir / "shorts_raw.mp4"
-        self.video_renderer.encode_frames(all_frames, raw_path)
+        frame_encoder.close()
+        if duration > max_duration:
+            trimmed_path = run_dir / "shorts_trimmed.mp4"
+            self.video_renderer.align_video_duration(raw_path, max_duration, trimmed_path)
+            raw_path = trimmed_path
+            duration = max_duration
 
         emotions = load_emotions_config()
         dominant = beats[0].emotion if beats else "exciting"
@@ -147,9 +163,3 @@ class ShortsRenderer:
         for beat, segment in zip(beats, segments):
             updated.append(beat.model_copy(update={"duration_seconds": segment.duration_seconds + 0.15}))
         return updated
-
-    def _pad_frames(self, frames: List[np.ndarray], target_duration: float, current_duration: float) -> List[np.ndarray]:
-        if not frames:
-            return frames
-        extra_frames = int((target_duration - current_duration) * self.fps)
-        return frames + [frames[-1].copy() for _ in range(max(0, extra_frames))]

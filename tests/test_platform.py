@@ -354,6 +354,27 @@ def test_visual_variety_director_returns_segment_styles():
     assert director.scene_transition() in {"crossfade", "push", "wipe"}
 
 
+def test_plan_scene_stream_chunks_matches_crossfade_total():
+    import numpy as np
+
+    from src.animation_engine.animation_engine import AnimationEngine
+
+    engine = AnimationEngine()
+    scene_a = [np.zeros((108, 192, 3), dtype=np.uint8) + index for index in range(20)]
+    scene_b = [np.zeros((108, 192, 3), dtype=np.uint8) + 50 + index for index in range(20)]
+
+    merged = engine.apply_crossfade(scene_a, scene_b, blend_frames=6, transition="crossfade")
+    tail: list[np.ndarray] = []
+    first_write, tail = engine.plan_scene_stream_chunks(
+        tail, scene_a, blend_frames=6, transition="crossfade", is_first_scene=True, is_last_scene=False
+    )
+    second_write, tail = engine.plan_scene_stream_chunks(
+        tail, scene_b, blend_frames=6, transition="crossfade", is_first_scene=False, is_last_scene=True
+    )
+    streamed = first_write + second_write
+    assert len(streamed) == len(merged)
+
+
 def test_normalize_beat_count_pads_missing_beats():
     from src.script.script_enricher import enrich_long_script, normalize_beat_count
 

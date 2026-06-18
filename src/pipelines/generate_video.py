@@ -17,6 +17,7 @@ from src.core.llm_policy import log_pipeline_llm_plan
 from src.core.models import BeatAudioSegment, BeatType, NarrativeScript, TopicCandidate, VideoPackage, WordTiming
 from src.research.research_collector import ResearchCollector
 from src.renderer.bgm_generator import generate_bgm
+from src.renderer.frame_stream_encoder import FrameStreamEncoder
 from src.renderer.shorts_renderer import ShortsRenderer
 from src.renderer.video_renderer import VideoRenderer
 from src.scheduler.content_scheduler import ContentScheduler, DailySlot
@@ -102,13 +103,22 @@ class VideoPipeline:
     ) -> VideoPackage:
         script = self.narrative_generator.generate(topic, research)
         beats = self.beat_extractor.extract(script)
+        log.info("Long script ready — %d beats", len(beats))
 
         narration_bundle = self.voice_engine.synthesize_all_beats(beats, run_dir / "audio")
+        log.info("Narration synthesized — %.0fs total", narration_bundle.total_duration_seconds)
         beats = self._apply_audio_durations(beats, narration_bundle.segments)
         scene_plans = self.visual_planner.plan_scenes(beats, research)
 
-        all_frames: List = []
-        hook_frames: List = []
+        hook_frame = None
+        scene_tail: List = []
+        raw_video_path = run_dir / "raw_video.mp4"
+        frame_encoder = FrameStreamEncoder(
+            raw_video_path,
+            self.animation_engine.width,
+            self.animation_engine.height,
+            self.animation_engine.fps,
+        )
         all_word_timings: List[WordTiming] = narration_bundle.all_word_timings
 
         for index, scene_plan in enumerate(scene_plans):
@@ -123,19 +133,31 @@ class VideoPipeline:
                 word_timings=segment.word_timings,
                 duration_seconds=scene_plan.beat.duration_seconds,
             )
-            if index == 0:
-                hook_frames = scene_frames
-            if all_frames:
-                transition = animation_plan.transition
-                blend = 18 if transition == "crossfade" else 12
-                all_frames = self.animation_engine.apply_crossfade(
-                    all_frames, scene_frames, blend_frames=blend, transition=transition
-                )
-            else:
-                all_frames.extend(scene_frames)
+            if hook_frame is None and scene_frames:
+                hook_index = min(len(scene_frames) - 1, int(len(scene_frames) * 0.8))
+                hook_frame = scene_frames[hook_index]
 
-        raw_video_path = run_dir / "raw_video.mp4"
-        self.video_renderer.encode_frames(all_frames, raw_video_path)
+            transition = animation_plan.transition if index > 0 else "crossfade"
+            blend_frames = 18 if transition == "crossfade" else 12
+            frames_to_write, scene_tail = self.animation_engine.plan_scene_stream_chunks(
+                scene_tail,
+                scene_frames,
+                blend_frames=blend_frames,
+                transition=transition,
+                is_first_scene=index == 0,
+                is_last_scene=index == len(scene_plans) - 1,
+            )
+            frame_encoder.write_frames(frames_to_write)
+            log.info(
+                "Rendered scene %d/%d — %d frames written (stream total=%d)",
+                index + 1,
+                len(scene_plans),
+                len(frames_to_write),
+                frame_encoder.frame_count,
+            )
+
+        frame_encoder.close()
+        log.info("Raw video encoded — %d frames", frame_encoder.frame_count)
 
         aligned_video_path = run_dir / "aligned_video.mp4"
         self.video_renderer.align_video_duration(
@@ -174,7 +196,6 @@ class VideoPipeline:
         chapters = self._build_macro_chapters(narration_bundle.segments, beats)
         metadata = self.metadata_generator.generate(topic, beats, chapters)
 
-        hook_frame = self.thumbnail_generator.pick_hook_frame(hook_frames)
         thumbnail_path = self.thumbnail_generator.generate(
             topic, run_dir / "thumbnail.jpg",
             hook_frame=hook_frame,
