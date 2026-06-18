@@ -172,10 +172,12 @@ class AnimationEngine:
                 ),
                 layout_mirror   = segment_style.layout_mirror,
                 figure_scale    = segment_style.figure_scale,
-                # NEW: pass beat context for badge + sparkles
                 beat_type       = beat_type_str,
                 frame_index     = frame_index,
                 fps             = effective_fps,
+                # Scene panel: pass keywords so panel picks right environment
+                visual_keywords      = list(scene_plan.beat.visual_keywords),
+                scene_index_for_panel= scene_index,
             )
 
             camera_zoom = float(motion_params["camera_zoom"])
