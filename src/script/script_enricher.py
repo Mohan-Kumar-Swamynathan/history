@@ -5,8 +5,8 @@ from __future__ import annotations
 import re
 
 from src.core.config_loader import load_topics_config
-from src.core.models import NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate
-from src.script.offline_story_bank import _expand_narration, _min_words_per_beat
+from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate
+from src.script.offline_story_bank import BEAT_EMOTIONS, _expand_narration, _min_words_per_beat, resolve_long_beat_order
 
 
 def enrich_long_script(
@@ -14,6 +14,7 @@ def enrich_long_script(
     topic: TopicCandidate,
     research: ResearchBrief,
 ) -> NarrativeScript:
+    script = normalize_beat_count(script, topic, research)
     targets = load_topics_config().get("script_targets", {})
     min_total_words = int(targets.get("long_min_words", 600))
     min_per_beat = _min_words_per_beat()
@@ -34,6 +35,58 @@ def _rebuild_script(script: NarrativeScript, beats: list[StoryBeat]) -> Narrativ
         format=script.format,
         full_narration_ta=narration,
     )
+
+
+def normalize_beat_count(
+    script: NarrativeScript,
+    topic: TopicCandidate,
+    research: ResearchBrief,
+) -> NarrativeScript:
+    beat_order = resolve_long_beat_order()
+    expected_count = len(beat_order)
+    beats = list(script.beats)
+
+    if len(beats) > expected_count:
+        beats = beats[:expected_count]
+
+    while len(beats) < expected_count:
+        index = len(beats)
+        beat_type = beat_order[index]
+        beats.append(_synthetic_beat(beat_type, topic, research, index))
+
+    return _rebuild_script(script, beats)
+
+
+def _synthetic_beat(
+    beat_type: BeatType,
+    topic: TopicCandidate,
+    research: ResearchBrief,
+    index: int,
+) -> StoryBeat:
+    snippet = _context_snippet(topic, research, beat_type.value)
+    narration = _expand_narration(f"{topic.protagonist}. {snippet}", _min_words_per_beat())
+    return StoryBeat(
+        beat_type=beat_type,
+        narration_ta=narration,
+        emotion=BEAT_EMOTIONS.get(beat_type, "neutral"),
+        protagonist=topic.protagonist,
+        on_screen_text=_default_on_screen_text(beat_type, topic),
+        visual_keywords=[["street"], ["office"], ["lightbulb"]][index % 3],
+        retention_hook="question",
+        macro_index=index // 3,
+    )
+
+
+def _default_on_screen_text(beat_type: BeatType, topic: TopicCandidate) -> str:
+    if beat_type == BeatType.HOOK:
+        return topic.protagonist_age or "?"
+    if beat_type == BeatType.TURNING_POINT:
+        return "திருப்புமுனை"
+    if beat_type == BeatType.LESSON:
+        return "பாடம்"
+    if beat_type == BeatType.CTA:
+        return "துளிர்"
+    return ""
 
 
 def _enrich_beat(

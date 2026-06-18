@@ -354,6 +354,28 @@ def test_visual_variety_director_returns_segment_styles():
     assert director.scene_transition() in {"crossfade", "push", "wipe"}
 
 
+def test_normalize_beat_count_pads_missing_beats():
+    from src.script.script_enricher import enrich_long_script, normalize_beat_count
+
+    topic = _builtin_fallback_topics()[0]
+    research = ResearchCollector()._offline_brief(topic)
+    beats = [
+        StoryBeat(
+            beat_type=BeatType.HOOK,
+            narration_ta=f"வரி {index}.",
+            emotion="exciting",
+            protagonist=topic.protagonist,
+        )
+        for index in range(11)
+    ]
+    script = NarrativeScript(topic=topic, beats=beats, format="long")
+    normalized = normalize_beat_count(script, topic, research)
+    assert len(normalized.beats) == 12
+    enriched = enrich_long_script(script, topic, research)
+    result = ScriptValidator().validate_long_script(enriched, topic)
+    assert result.valid, result.errors
+
+
 def test_enrich_long_script_meets_minimum_words():
     from src.script.script_enricher import enrich_long_script
 
