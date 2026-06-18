@@ -8,6 +8,7 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.models import NarrativeScript, StoryMode, TopicCandidate
+from src.script.offline_story_bank import resolve_long_beat_order
 
 
 @dataclass
@@ -22,8 +23,8 @@ class ScriptValidator:
         config = load_topics_config().get("script_targets", {})
         min_words = int(config.get("long_min_words", 1000))
         max_words = int(config.get("long_max_words", 2000))
-        min_per_beat = int(config.get("long_min_words_per_beat", 30))
-        expected_beats = int(config.get("long_beat_count", 24))
+        min_per_beat = int(config.get("long_min_words_per_beat", 25))
+        expected_beats = len(resolve_long_beat_order())
         blocklist = load_topics_config().get("blocklist_patterns", [])
 
         errors: List[str] = []

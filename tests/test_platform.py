@@ -354,6 +354,27 @@ def test_visual_variety_director_returns_segment_styles():
     assert director.scene_transition() in {"crossfade", "push", "wipe"}
 
 
+def test_enrich_long_script_meets_minimum_words():
+    from src.script.script_enricher import enrich_long_script
+
+    topic = _builtin_fallback_topics()[0]
+    research = ResearchCollector()._offline_brief(topic)
+    short_beats = [
+        StoryBeat(
+            beat_type=BeatType.HOOK,
+            narration_ta="குறுகிய வரி.",
+            emotion="exciting",
+            protagonist=topic.protagonist,
+        )
+        for _ in range(12)
+    ]
+    script = NarrativeScript(topic=topic, beats=short_beats, format="long")
+    enriched = enrich_long_script(script, topic, research)
+    result = ScriptValidator().validate_long_script(enriched, topic)
+    assert result.word_count >= 600, result.errors
+    assert result.valid, result.errors
+
+
 def test_story_mode_enum_values():
     assert StoryMode.BIOGRAPHICAL.value == "biographical"
     assert ContentBucket.BUSINESS.value == "business"

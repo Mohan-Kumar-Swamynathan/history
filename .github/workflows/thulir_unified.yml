@@ -26,6 +26,10 @@ on:
           - "true"
           - "false"
 
+concurrency:
+  group: thulir-unified-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 

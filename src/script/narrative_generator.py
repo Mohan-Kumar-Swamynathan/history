@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from typing import List
@@ -20,9 +19,12 @@ from src.core.llm_policy import (
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_EMOTIONS, build_offline_long_script, resolve_long_beat_order
+from src.script.script_enricher import enrich_long_script
 from src.script.script_validator import ScriptValidator
 
 log = logging.getLogger(__name__)
+
+MAX_SCRIPT_ATTEMPTS = 2
 
 
 class NarrativeGenerator:
@@ -34,15 +36,29 @@ class NarrativeGenerator:
             log.info("Using offline long script (%d beats, llm_mode=%s)", len(resolve_long_beat_order()), resolve_llm_mode())
             return build_offline_long_script(topic, research)
 
-        if has_llm_credentials():
+        if not has_llm_credentials():
+            return build_offline_long_script(topic, research)
+
+        validation_errors: List[str] | None = None
+        for attempt in range(1, MAX_SCRIPT_ATTEMPTS + 1):
             try:
-                script = self._generate_with_llm(topic, research)
+                script = self._generate_with_llm(topic, research, feedback=validation_errors)
+                script = enrich_long_script(script, topic, research)
                 result = self.validator.validate_long_script(script, topic)
                 if result.valid:
+                    log.info(
+                        "Long script accepted via llm (attempt %d, %d words)",
+                        attempt,
+                        result.word_count,
+                    )
                     return script
-                log.warning("Script validation failed: %s — offline fallback", result.errors)
+                validation_errors = result.errors
+                log.warning("Script validation attempt %d failed: %s", attempt, result.errors)
             except Exception as exc:
-                log.warning("LLM narrative failed: %s — using offline script", exc)
+                validation_errors = [str(exc)]
+                log.warning("LLM narrative attempt %d failed: %s", attempt, exc)
+
+        log.warning("Using offline long script after %d LLM attempts", MAX_SCRIPT_ATTEMPTS)
         return build_offline_long_script(topic, research)
 
     def _generate_with_llm(
@@ -55,6 +71,7 @@ class NarrativeGenerator:
         beat_count = len(resolve_long_beat_order())
         min_words = int(targets.get("long_min_words", 600))
         max_words = int(targets.get("long_max_words", 900))
+        min_per_beat = max(40, min_words // beat_count)
 
         feedback_text = ""
         if feedback:
@@ -77,10 +94,11 @@ Research: {research.story_facts[:5]}
 RULES:
 - Total {min_words}-{max_words} Tamil words across all beats
 - Exactly {beat_count} beats in this order (repeat cycle): hook, context, conflict, escalation, turning_point, resolution, lesson, cta
-- Each beat 40-70 words — specific numbers, dialogue, places
+- Each beat MUST be {min_per_beat}-70 Tamil words with specific numbers, dialogue, places
+- Include protagonist name "{topic.protagonist}" and at least 3 numbers/dates across script
 - 3rd person narration. No preaching. Story is the topic, lesson is the reward
-- Beat 1 must open with channel greeting: "வணக்கம்! துளிர் channel..."
-- Final beat must ask viewer to like, share, subscribe, and hit the bell
+- Beat 1 opens with: "வணக்கம்! துளிர் channel..."
+- Final beat asks viewer to like, share, subscribe, and hit the bell
 - Beat 2 must contain open loop
 {feedback_text}
 
@@ -97,24 +115,26 @@ Return ONLY the JSON array. No markdown fences."""
             preferred=preferred_provider_for_stage(STAGE_LONG_SCRIPT),
         )
         beats = self._parse_beats(raw, topic)
-        if beats:
-            beats[0] = beats[0].model_copy(
-                update={"narration_ta": prepend_greeting(beats[0].narration_ta)}
-            )
-            beats[-1] = beats[-1].model_copy(
-                update={"narration_ta": append_outro_cta(beats[-1].narration_ta)}
-            )
+        if not beats:
+            raise ValueError("No beat array in LLM response")
+        beats[0] = beats[0].model_copy(
+            update={"narration_ta": prepend_greeting(beats[0].narration_ta)}
+        )
+        beats[-1] = beats[-1].model_copy(
+            update={"narration_ta": append_outro_cta(beats[-1].narration_ta)}
+        )
         return NarrativeScript(topic=topic, beats=beats, format="long")
 
     def _parse_beats(self, raw: str, topic: TopicCandidate) -> List[StoryBeat]:
         beat_data = extract_json_array(raw)
         if not beat_data:
             raise ValueError("No beat array in LLM response")
+        beat_order = resolve_long_beat_order()
         beats: List[StoryBeat] = []
         for index, item in enumerate(beat_data):
             beat_type = resolve_beat_type(
                 item.get("beat_type"),
-                resolve_long_beat_order()[index % len(resolve_long_beat_order())],
+                beat_order[index % len(beat_order)],
             )
             beats.append(
                 StoryBeat(
