@@ -61,14 +61,19 @@ def test_topic_scorer_rejects_blocklist():
     assert "top 10" not in result.title_ta.lower() or result.source == "offline"
 
 
-def test_offline_long_script_has_24_beats():
+def test_offline_long_script_meets_targets():
+    from src.core.config_loader import load_topics_config
+
     topic = _builtin_fallback_topics()[0]
     research = ResearchCollector()._offline_brief(topic)
     script = build_offline_long_script(topic, research)
-    assert len(script.beats) == 24
+    targets = load_topics_config().get("script_targets", {})
+    expected_beats = int(targets.get("long_beat_count", 12))
+    min_words = int(targets.get("long_min_words", 600))
+    assert len(script.beats) == expected_beats
     validator = ScriptValidator()
     result = validator.validate_long_script(script, topic)
-    assert result.word_count >= 1000, f"Only {result.word_count} words"
+    assert result.word_count >= min_words, f"Only {result.word_count} words"
     assert result.valid, result.errors
 
 
@@ -95,7 +100,9 @@ def test_story_beat_extractor_enriches_entities():
     research = ResearchCollector()._offline_brief(topic)
     script = build_offline_long_script(topic, research)
     beats = StoryBeatExtractor().extract(script)
-    assert len(beats) == 24
+    from src.core.config_loader import load_topics_config
+    expected_beats = int(load_topics_config().get("script_targets", {}).get("long_beat_count", 12))
+    assert len(beats) == expected_beats
     assert beats[0].protagonist == "ரவி"
 
 

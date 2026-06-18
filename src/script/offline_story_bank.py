@@ -1,11 +1,27 @@
-"""Offline 24-beat story expansion from topic schema."""
+"""Offline story expansion from topic schema — compact (12) or full (24) beats."""
 
 from __future__ import annotations
 
+from src.core.config_loader import load_topics_config
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 
-BEAT_ORDER = [
+COMPACT_BEAT_ORDER = [
+    BeatType.HOOK,
+    BeatType.HOOK,
+    BeatType.CONTEXT,
+    BeatType.CONTEXT,
+    BeatType.CONFLICT,
+    BeatType.CONFLICT,
+    BeatType.ESCALATION,
+    BeatType.TURNING_POINT,
+    BeatType.TURNING_POINT,
+    BeatType.RESOLUTION,
+    BeatType.LESSON,
+    BeatType.CTA,
+]
+
+FULL_BEAT_ORDER = [
     BeatType.HOOK,
     BeatType.HOOK,
     BeatType.HOOK,
@@ -31,6 +47,8 @@ BEAT_ORDER = [
     BeatType.CTA,
     BeatType.CTA,
 ]
+
+BEAT_ORDER = COMPACT_BEAT_ORDER
 
 BEAT_EMOTIONS = {
     BeatType.HOOK: "exciting",
@@ -69,22 +87,42 @@ def _expand_narration(base: str, min_words: int = 45) -> str:
     return expanded
 
 
+def resolve_long_beat_order() -> list[BeatType]:
+    beat_count = int(load_topics_config().get("script_targets", {}).get("long_beat_count", 12))
+    if beat_count <= len(COMPACT_BEAT_ORDER):
+        return COMPACT_BEAT_ORDER[:beat_count]
+    return FULL_BEAT_ORDER[:beat_count]
+
+
+def _min_words_per_beat() -> int:
+    targets = load_topics_config().get("script_targets", {})
+    beat_count = max(1, int(targets.get("long_beat_count", 12)))
+    target_words = int(targets.get("long_target_words", 750))
+    configured_min = int(targets.get("long_min_words_per_beat", 25))
+    return max(configured_min, target_words // beat_count)
+
+
 def build_offline_long_script(topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
     protagonist = topic.protagonist
     templates = _build_templates(topic, research)
+    beat_order = resolve_long_beat_order()
+    min_words = _min_words_per_beat()
     beats: list[StoryBeat] = []
     macro_index = 0
     last_macro = None
 
-    for index, beat_type in enumerate(BEAT_ORDER):
+    for index, beat_type in enumerate(beat_order):
         if beat_type != last_macro:
             macro_index += 1
             last_macro = beat_type
         template_index = index % len(templates.get(beat_type, [""]))
-        narration = _expand_narration(templates[beat_type][template_index % len(templates[beat_type])])
+        narration = _expand_narration(
+            templates[beat_type][template_index % len(templates[beat_type])],
+            min_words=min_words,
+        )
         if index == 0:
             narration = prepend_greeting(narration, is_shorts=False)
-        if beat_type == BeatType.CTA and index == len(BEAT_ORDER) - 1:
+        if beat_type == BeatType.CTA and index == len(beat_order) - 1:
             narration = append_outro_cta(narration, is_shorts=False)
         beats.append(
             StoryBeat(

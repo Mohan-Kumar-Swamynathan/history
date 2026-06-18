@@ -26,11 +26,12 @@ blocklist_patterns:
   - "generic motivation"
 
 script_targets:
-  long_min_words: 1000
-  long_max_words: 2000
-  long_target_words: 1400
-  long_beat_count: 24
-  long_min_words_per_beat: 30
+  long_min_words: 600
+  long_max_words: 900
+  long_target_words: 750
+  long_beat_count: 12
+  long_min_words_per_beat: 25
+  long_target_minutes: 5
   shorts_min_words: 80
   shorts_max_words: 150
   shorts_beat_count: 5

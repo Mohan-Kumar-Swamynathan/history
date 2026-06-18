@@ -10,8 +10,8 @@ video:
   fps: 24
   shorts_width: 1080
   shorts_height: 1920
-  long_target_minutes_min: 8
-  long_target_minutes_max: 12
+  long_target_minutes_min: 5
+  long_target_minutes_max: 5
 
 channel:
   name: "துளிர்"

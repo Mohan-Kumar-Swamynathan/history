@@ -12,7 +12,7 @@ from src.core.llm_client import generate_text, has_llm_credentials
 from src.core.llm_policy import STAGE_LONG_SCRIPT, resolve_llm_mode, should_use_llm
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
-from src.script.offline_story_bank import BEAT_ORDER, BEAT_EMOTIONS, build_offline_long_script
+from src.script.offline_story_bank import BEAT_EMOTIONS, build_offline_long_script, resolve_long_beat_order
 from src.script.script_validator import ScriptValidator
 
 log = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ class NarrativeGenerator:
 
     def generate(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
         if not should_use_llm(STAGE_LONG_SCRIPT):
-            log.info("Using offline 24-beat long script (llm_mode=%s)", resolve_llm_mode())
+            log.info("Using offline long script (%d beats, llm_mode=%s)", len(resolve_long_beat_order()), resolve_llm_mode())
             return build_offline_long_script(topic, research)
 
         if has_llm_credentials():
@@ -102,7 +102,7 @@ Return JSON array of {beat_count} objects:
         for index, item in enumerate(beat_data):
             beat_type = resolve_beat_type(
                 item.get("beat_type"),
-                BEAT_ORDER[index % len(BEAT_ORDER)],
+                resolve_long_beat_order()[index % len(resolve_long_beat_order())],
             )
             beats.append(
                 StoryBeat(

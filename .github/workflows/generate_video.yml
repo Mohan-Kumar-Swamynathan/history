@@ -1,11 +1,9 @@
-name: Thulir Daily Content
+# DISABLED — replaced by thulir_unified.yml
+# Manual trigger only for debugging.
+
+name: Thulir Daily Content (deprecated)
 
 on:
-  schedule:
-    - cron: "30 3 * * *"   # 09:00 IST — morning long
-    - cron: "0 4 * * *"    # 09:30 IST — morning short
-    - cron: "0 13 * * *"   # 18:30 IST — evening long (optimal prime window)
-    - cron: "30 13 * * *"  # 19:00 IST — evening short
   workflow_dispatch:
     inputs:
       format:
@@ -16,147 +14,11 @@ on:
         options:
           - long
           - short
-      upload:
-        description: "Upload to YouTube"
-        required: false
-        default: "false"
-        type: choice
-        options:
-          - "false"
-          - "true"
-
-permissions:
-  contents: write
-
-env:
-  GEMINI_KEY:            ${{ secrets.GEMINI_KEY }}
-  GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
-  CLIENT_SECRETS_BASE64: ${{ secrets.CLIENT_SECRETS_BASE64 }}
-  YOUTUBE_TOKEN_BASE64:  ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
-  GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
-  GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
-  PYTHONUNBUFFERED:      "1"
-  LLM_MODE:              minimal
 
 jobs:
-  morning_long:
-    if: github.event.schedule == '30 3 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.format == 'long')
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
-          pip install -r requirements.txt
-      - name: Restore YouTube credentials
-        run: |
-          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
-            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
-          fi
-          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
-            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
-          fi
-      - name: Generate morning long video
-        run: |
-          python generate_video.py --format long --daily-slot morning_long --upload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: morning-long-${{ github.run_id }}
-          path: output/runs/**/*
-          retention-days: 7
-
-  morning_short:
-    if: github.event.schedule == '0 4 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.format == 'short')
+  deprecated_notice:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
-          pip install -r requirements.txt
-      - name: Restore YouTube credentials
-        run: |
-          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
-            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
-          fi
-          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
-            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
-          fi
-      - name: Generate morning short
-        run: |
-          python generate_video.py --format short --daily-slot morning_short --upload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: morning-short-${{ github.run_id }}
-          path: output/runs/**/*
-          retention-days: 7
-
-  evening_long:
-    if: github.event.schedule == '0 13 * * *'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
-          pip install -r requirements.txt
-      - name: Restore YouTube credentials
-        run: |
-          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
-            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
-          fi
-          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
-            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
-          fi
-      - name: Generate evening long video
-        run: |
-          python generate_video.py --format long --daily-slot evening_long --no-shorts --upload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: evening-long-${{ github.run_id }}
-          path: output/runs/**/*
-          retention-days: 7
-
-  evening_short:
-    if: github.event.schedule == '30 13 * * *'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
-          pip install -r requirements.txt
-      - name: Restore YouTube credentials
-        run: |
-          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
-            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
-          fi
-          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
-            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
-          fi
-      - name: Generate evening short
-        run: |
-          python generate_video.py --format short --daily-slot evening_short --upload
-      - uses: actions/upload-artifact@v4
-        with:
-          name: evening-short-${{ github.run_id }}
-          path: output/runs/**/*
-          retention-days: 7
+      - run: |
+          echo "This workflow is deprecated. Use 'Thulir Unified Pipeline' instead."
+          exit 1

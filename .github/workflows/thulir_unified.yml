@@ -1,0 +1,111 @@
+name: Thulir Unified Pipeline
+
+# Single pipeline: long video (~5 min) + Shorts, twice daily, YouTube upload.
+# Uses generate_video.py → src/pipelines/ (unified framework).
+
+on:
+  schedule:
+    - cron: "30 3 * * *"   # 09:00 IST — morning long + shorts
+    - cron: "30 13 * * *"  # 19:00 IST — evening long + shorts
+  workflow_dispatch:
+    inputs:
+      daily_slot:
+        description: "Daily slot"
+        required: false
+        default: "morning_long"
+        type: choice
+        options:
+          - morning_long
+          - evening_long
+      upload:
+        description: "Upload to YouTube"
+        required: false
+        default: "true"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+permissions:
+  contents: write
+
+env:
+  GEMINI_KEY:            ${{ secrets.GEMINI_KEY }}
+  GROQ_API_KEY:          ${{ secrets.GROQ_API_KEY }}
+  CLIENT_SECRETS_BASE64: ${{ secrets.CLIENT_SECRETS_BASE64 }}
+  YOUTUBE_TOKEN_BASE64:  ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
+  GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
+  GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+  PYTHONUNBUFFERED:      "1"
+  LLM_MODE:              minimal
+
+jobs:
+  morning_bundle:
+    if: github.event.schedule == '30 3 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'morning_long')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
+          pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
+      - name: Generate long video + Shorts and upload
+        run: |
+          UPLOAD_FLAG=""
+          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
+            UPLOAD_FLAG="--upload"
+          fi
+          python generate_video.py --format long --daily-slot morning_long $UPLOAD_FLAG
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thulir-morning-${{ github.run_id }}
+          path: output/runs/**/*
+          retention-days: 7
+
+  evening_bundle:
+    if: github.event.schedule == '30 13 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'evening_long')
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
+          pip install -r requirements.txt
+      - name: Restore YouTube credentials
+        run: |
+          if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+            echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+          fi
+          if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+            echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+          fi
+      - name: Generate long video + Shorts and upload
+        run: |
+          UPLOAD_FLAG=""
+          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
+            UPLOAD_FLAG="--upload"
+          fi
+          python generate_video.py --format long --daily-slot evening_long $UPLOAD_FLAG
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thulir-evening-${{ github.run_id }}
+          path: output/runs/**/*
+          retention-days: 7

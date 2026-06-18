@@ -1,9 +1,9 @@
 name: Cleanup Old Artifacts
 
+# DISABLED — use thulir_unified.yml for all scheduled jobs.
+
 on:
-  schedule:
-    - cron: "0 2 * * *"   # 07:30 IST daily — runs before morning video generation
-  workflow_dispatch:       # allow manual trigger
+  workflow_dispatch:
 
 jobs:
   cleanup:

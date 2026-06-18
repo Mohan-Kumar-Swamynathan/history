@@ -33,16 +33,14 @@ python generate_video.py --format short
 
 ### Daily automation (GitHub Actions)
 
-Workflow: **Actions → Thulir Daily Content** (`generate_video.yml`)
+Workflow: **Actions → Thulir Unified Pipeline** (`thulir_unified.yml`)
 
-| Slot | IST | Format |
+| Slot | IST | Output |
 |------|-----|--------|
-| morning_long | 09:00 | Long + Shorts |
-| morning_short | 09:30 | Shorts |
-| evening_long | 18:30 | Long |
-| evening_short | 19:00 | Shorts |
+| Morning | 09:00 | ~5 min long video + Shorts → YouTube |
+| Evening | 19:00 | ~5 min long video + Shorts → YouTube |
 
-Legacy workflows (`thulir_daily.yml`, `bot.py`, `thulir_v2_bot.py`, etc.) are **disabled** — manual trigger only.
+Legacy workflows are **disabled** (manual trigger only).
 
 ---
 
