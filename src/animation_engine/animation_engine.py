@@ -72,10 +72,12 @@ class AnimationEngine:
         word_timings:      List[WordTiming] | None = None,
         duration_seconds:  float | None = None,
         is_shorts:         bool = False,
+        fps_override:      int | None = None,
     ) -> Tuple[List[np.ndarray], List[WordTiming]]:
         words         = re.findall(r"\S+", scene_plan.beat.narration_ta)
         duration      = duration_seconds or scene_plan.beat.duration_seconds
-        total_frames  = max(int(duration * self.fps), self.fps * 2)
+        effective_fps = fps_override if fps_override is not None else self.fps
+        total_frames  = max(int(duration * effective_fps), effective_fps * 2)
         beat_timings  = word_timings or []
         beat_type_str = scene_plan.beat.beat_type.value
 
@@ -99,7 +101,7 @@ class AnimationEngine:
         segment_frames   = max(int(self.fps * visual_interval), self.fps // 2)
 
         for frame_index in range(total_frames):
-            current_ms     = int((frame_index / self.fps) * 1000)
+            current_ms     = int((frame_index / effective_fps) * 1000)
             progress       = frame_index / max(total_frames - 1, 1)
             visible_words  = self._visible_word_count(beat_timings, current_ms, len(words))
             visual_segment = frame_index // segment_frames
@@ -173,7 +175,7 @@ class AnimationEngine:
                 # NEW: pass beat context for badge + sparkles
                 beat_type       = beat_type_str,
                 frame_index     = frame_index,
-                fps             = self.fps,
+                fps             = effective_fps,
             )
 
             camera_zoom = float(motion_params["camera_zoom"])
