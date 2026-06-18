@@ -127,7 +127,7 @@ class VideoPipeline:
                 hook_frames = scene_frames
             if all_frames:
                 transition = animation_plan.transition
-                blend = 16 if transition == "crossfade" else 14
+                blend = 18 if transition == "crossfade" else 12
                 all_frames = self.animation_engine.apply_crossfade(
                     all_frames, scene_frames, blend_frames=blend, transition=transition
                 )

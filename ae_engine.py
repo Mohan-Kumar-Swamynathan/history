@@ -60,13 +60,25 @@ def _tw(draw, text, sz):
         w += draw.textbbox((0,0), seg, font=f)[2]
     return w
 
-def _dt(draw, text, x, y, sz, col):
+def _dt(draw, text, x, y, sz, col, shadow: bool = False):
     cx = x
+    if shadow:
+        for seg, t in _segs(text):
+            f = _f("ta" if t=="ta" else "en", sz)
+            draw.text((cx + 2, y + 2), seg, font=f, fill=FAINT, anchor="lt")
+            cx += draw.textbbox((0,0), seg, font=f)[2]
+        cx = x
     for seg, t in _segs(text):
         f = _f("ta" if t=="ta" else "en", sz)
         draw.text((cx, y), seg, font=f, fill=col, anchor="lt")
         cx += draw.textbbox((0,0), seg, font=f)[2]
     return cx
+
+
+def _apply_paper_wash(draw, width: int, height: int) -> None:
+    for row in range(0, height, 56):
+        draw.line([(0, row), (width, row)], fill=FAINT, width=1)
+    draw.rectangle([0, 0, width, height], outline=(240, 238, 232), width=2)
 
 def _wrap(words, sz, maxw, draw):
     lines, cur = [], []
@@ -429,10 +441,13 @@ def render_frame(
     text_drift_y   : int = 0,
     word_pop       : float = 0.0,
     on_screen_text : str = "",
+    layout_mirror  : bool = False,
+    figure_scale   : float = 1.0,
 ) -> Image.Image:
 
     img  = Image.new("RGB", (W, H), WHITE)
     draw = ImageDraw.Draw(img)
+    _apply_paper_wash(draw, W, H)
 
     if is_shorts:
         return _render_shorts_frame(
@@ -452,20 +467,28 @@ def render_frame(
             bg_offset_y=bg_offset_y,
             text_drift_y=text_drift_y,
             word_pop=word_pop,
+            layout_mirror=layout_mirror,
+            figure_scale=figure_scale,
         )
 
     # ── Layout constants (landscape 16:9) ─────────────────────────────
-    FIG_SIZE = 400
+    FIG_SIZE = int(400 * figure_scale)
     BG_W, BG_H = 580, 500
-    if is_shorts:
-        # 9:16 layout
-        FIG_SIZE = 300
-        BG_W, BG_H = 400, 380
 
-    FIG_X = W - FIG_SIZE - 50 + figure_offset_x
-    FIG_Y = H - FIG_SIZE - 80 + figure_offset_y
-    BG_X  = FIG_X - 30 + bg_offset_x
-    BG_Y  = 80 + bg_offset_y
+    if layout_mirror:
+        FIG_X = 50 + figure_offset_x
+        FIG_Y = H - FIG_SIZE - 80 + figure_offset_y
+        BG_X = FIG_X + FIG_SIZE + 24 + bg_offset_x
+        BG_Y = 80 + bg_offset_y
+        TEXT_X = BG_X + BG_W + 40
+        TEXT_W = W - TEXT_X - 50
+    else:
+        FIG_X = W - FIG_SIZE - 50 + figure_offset_x
+        FIG_Y = H - FIG_SIZE - 80 + figure_offset_y
+        BG_X = FIG_X - 30 + bg_offset_x
+        BG_Y = 80 + bg_offset_y
+        TEXT_X = 55
+        TEXT_W = FIG_X - 90
 
     # ── 1. Scene background drawing ───────────────────────────────────
     if bg_draw_fn is not None and bg_progress > 0.02:
@@ -507,9 +530,7 @@ def render_frame(
         draw.rounded_rectangle([55, 20, 55 + badge_w, 80], radius=12, fill=(205, 35, 25))
         _dt(draw, badge_text, 75, 28, 48, (255, 255, 255))
 
-    TEXT_X   = 55
-    TEXT_Y   = 72 + text_drift_y
-    TEXT_W   = FIG_X - 90   # leave gap before figure/bg area
+    TEXT_Y = 72 + text_drift_y
 
     words_vis = all_words[:visible]
     total_w   = len(all_words)
@@ -535,7 +556,7 @@ def render_frame(
             if is_curr and word_pop > 0:
                 pop_offset = int((1.0 - word_pop) * 22)
                 draw_y = y - pop_offset
-            last_x = _dt(draw, word + " ", x, draw_y, fsz, col)
+            last_x = _dt(draw, word + " ", x, draw_y, fsz, col, shadow=is_curr)
             x = last_x; wi += 1
         lh_px = draw.textbbox((0,0), "A", font=_f("ta", fsz))[3] + 24
         y += lh_px
@@ -566,9 +587,11 @@ def _render_shorts_frame(
     bg_offset_y: int,
     text_drift_y: int,
     word_pop: float,
+    layout_mirror: bool = False,
+    figure_scale: float = 1.0,
 ) -> Image.Image:
     """9:16 vertical layout — headline top, visuals lower third, text always on-screen."""
-    FIG_SIZE = 260
+    FIG_SIZE = int(260 * figure_scale)
     BG_W, BG_H = 360, 300
     TEXT_X = 50
     TEXT_W = W - 100
@@ -595,7 +618,10 @@ def _render_shorts_frame(
     visual_center_x = W // 2
     BG_X = visual_center_x - BG_W // 2 + bg_offset_x
     BG_Y = int(H * 0.52) + bg_offset_y
-    FIG_X = visual_center_x - FIG_SIZE // 2 + 120 + figure_offset_x
+    if layout_mirror:
+        FIG_X = visual_center_x - FIG_SIZE - 80 + figure_offset_x
+    else:
+        FIG_X = visual_center_x - FIG_SIZE // 2 + 120 + figure_offset_x
     FIG_Y = BG_Y + BG_H - 40 + figure_offset_y
 
     if bg_draw_fn is not None and bg_progress > 0.02:
@@ -638,7 +664,7 @@ def _render_shorts_frame(
             draw_y = y
             if is_curr and word_pop > 0:
                 draw_y = y - int((1.0 - word_pop) * 18)
-            last_x = _dt(draw, word + " ", x, draw_y, fsz, col)
+            last_x = _dt(draw, word + " ", x, draw_y, fsz, col, shadow=is_curr)
             x = last_x
             wi += 1
         lh_px = draw.textbbox((0, 0), "A", font=_f("ta", fsz))[3] + 20

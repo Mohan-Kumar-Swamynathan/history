@@ -175,7 +175,7 @@ def test_colored_icons_match_keywords():
     from src.asset_engine.decoration_engine import pick_scene_icons, get_icon_color
 
     icons = pick_scene_icons("உங்கள் சம்பளம் மற்றும் பயம்")
-    assert len(icons) == 1
+    assert len(icons) >= 1
     color = get_icon_color("heart")
     assert color[0] > 200
 
@@ -339,6 +339,19 @@ def test_extract_json_object_single_topic():
     parsed = extract_json_object(raw)
     assert parsed is not None
     assert parsed["protagonist"] == "ரவி"
+
+
+def test_visual_variety_director_returns_segment_styles():
+    from src.animation_engine.visual_variety import VisualVarietyDirector
+    from src.core.models import BeatType
+
+    director = VisualVarietyDirector("scene-1", "exciting", BeatType.HOOK)
+    first = director.segment_style(0)
+    second = director.segment_style(1)
+    assert first.motion_variant
+    assert first.figure_emotion
+    assert first.accent_icon
+    assert director.scene_transition() in {"crossfade", "push", "wipe"}
 
 
 def test_story_mode_enum_values():

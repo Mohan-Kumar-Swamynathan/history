@@ -19,6 +19,7 @@ from src.animation_engine.motion_effects import (  # noqa: E402
     MotionCalculator,
     apply_camera_transform,
 )
+from src.animation_engine.visual_variety import VisualVarietyDirector
 from src.asset_engine.background_tints import tint_key_from_background, wrap_background_with_color
 from src.asset_engine.decoration_engine import composite_scene_decorations
 from src.core.config_loader import load_platform_config  # noqa: E402
@@ -26,8 +27,8 @@ from src.animation_engine.documentary_scenes import render_documentary_scene
 from src.core.models import AnimationPlan, ScenePlan, SceneType, WordTiming  # noqa: E402
 
 
-SHORTS_VISUAL_CHANGE_SECONDS = 1.5
-LONG_VISUAL_CHANGE_SECONDS = 2.5
+SHORTS_VISUAL_CHANGE_SECONDS = 1.2
+LONG_VISUAL_CHANGE_SECONDS = 2.0
 
 
 class AnimationEngine:
@@ -47,12 +48,16 @@ class AnimationEngine:
             "thinking": "thinking",
             "neutral": "neutral",
         }
-        motion = MotionCalculator(scene_plan.emotion, scene_plan.beat.beat_type)
+        director = VisualVarietyDirector(
+            scene_key=f"{scene_plan.protagonist}:{scene_plan.beat.beat_type.value}:{scene_plan.background_key}",
+            base_emotion=scene_plan.emotion,
+            beat_type=scene_plan.beat.beat_type,
+        )
         return AnimationPlan(
             scene_plan=scene_plan,
             camera_motion="zoom_in",
-            element_animations=["draw", "highlight", "walk_in", "word_pop", "parallax"],
-            transition=motion.transition_style(),
+            element_animations=["draw", "highlight", "walk_in", "word_pop", "parallax", "particles"],
+            transition=director.scene_transition(),
             figure_emotion=emotion_map.get(scene_plan.emotion, "neutral"),
         )
 
@@ -83,11 +88,15 @@ class AnimationEngine:
             doc_frames = render_documentary_scene(scene_plan, total_frames, self.fps)
             return doc_frames, beat_timings
 
-        motion = MotionCalculator(scene_plan.emotion, scene_plan.beat.beat_type)
+        director = VisualVarietyDirector(
+            scene_key=f"{scene_index}:{scene_plan.beat.beat_type.value}:{scene_plan.background_key}",
+            base_emotion=scene_plan.emotion,
+            beat_type=scene_plan.beat.beat_type,
+        )
         frames: List[np.ndarray] = []
         previous_visible = 0
         visual_interval = SHORTS_VISUAL_CHANGE_SECONDS if is_shorts else LONG_VISUAL_CHANGE_SECONDS
-        segment_frames = max(int(self.fps * visual_interval), self.fps)
+        segment_frames = max(int(self.fps * visual_interval), self.fps // 2)
 
         for frame_index in range(total_frames):
             current_ms = int((frame_index / self.fps) * 1000)
@@ -95,20 +104,36 @@ class AnimationEngine:
             visible_words = self._visible_word_count(beat_timings, current_ms, len(words))
             visual_segment = frame_index // segment_frames
             segment_progress = (frame_index % segment_frames) / max(segment_frames - 1, 1)
+            segment_style = director.segment_style(visual_segment)
+            motion = MotionCalculator(
+                scene_plan.emotion,
+                scene_plan.beat.beat_type,
+                motion_variant=segment_style.motion_variant,
+            )
             motion_params = motion.compute(segment_progress, frame_ratio=segment_progress)
 
             word_just_appeared = visible_words > previous_visible
-            word_pop = 1.0 if word_just_appeared else max(0.0, 1.0 - (frame_index % 8) / 8.0)
+            word_pop = 1.0 if word_just_appeared else max(0.0, 1.0 - (frame_index % 6) / 6.0)
             previous_visible = visible_words
 
-            bg_seed = scene_index * 100 + visual_segment + hash(scene_plan.background_key) % 17
-            bg_draw_fn = pick_background(scene_plan.beat.narration_ta, bg_seed)
+            bg_seed = (
+                scene_index * 100
+                + visual_segment * 13
+                + segment_style.bg_seed_offset
+                + hash(scene_plan.background_key) % 17
+            )
+            for keyword in scene_plan.beat.visual_keywords:
+                bg_draw_fn = pick_background(keyword, bg_seed)
+                if bg_draw_fn is not None:
+                    break
+            else:
+                bg_draw_fn = pick_background(scene_plan.beat.narration_ta, bg_seed)
             if bg_draw_fn is not None:
                 tint_key = tint_key_from_background(scene_plan.background_key)
                 bg_draw_fn = wrap_background_with_color(bg_draw_fn, tint_key)
 
-            figure_base = 0.18 if is_shorts else 0.08
-            bg_base = 0.22 if is_shorts else 0.10
+            figure_base = 0.12 if is_shorts else 0.05
+            bg_base = 0.15 if is_shorts else 0.06
             figure_progress = min(
                 1.0,
                 figure_base + segment_progress * float(motion_params["figure_progress_multiplier"]),
@@ -123,24 +148,26 @@ class AnimationEngine:
                 visible=visible_words,
                 figure_progress=figure_progress,
                 bg_progress=bg_progress,
-                emotion=animation_plan.figure_emotion,
+                emotion=segment_style.figure_emotion,
                 protagonist=scene_plan.protagonist,
                 bg_draw_fn=bg_draw_fn,
                 scene_num=scene_index,
                 total_scenes=total_scenes,
                 is_shorts=is_shorts,
                 on_screen_text=scene_plan.beat.on_screen_text or "",
-                figure_offset_x=int(motion_params["figure_offset_x"] * (0.25 if is_shorts else 1.0)),
+                figure_offset_x=int(motion_params["figure_offset_x"] * (0.3 if is_shorts else 1.0)),
                 figure_offset_y=int(motion_params["figure_offset_y"]),
                 bg_offset_x=int(motion_params["bg_offset_x"]),
                 bg_offset_y=int(motion_params["bg_offset_y"]),
                 text_drift_y=int(motion_params["text_drift_y"]),
-                word_pop=word_pop if word_just_appeared or visible_words == len(words) else word_pop * 0.3,
+                word_pop=word_pop if word_just_appeared or visible_words == len(words) else word_pop * 0.35,
+                layout_mirror=segment_style.layout_mirror,
+                figure_scale=segment_style.figure_scale,
             )
 
             camera_zoom = float(motion_params["camera_zoom"])
             if is_shorts:
-                camera_zoom = min(camera_zoom, 1.02)
+                camera_zoom = min(camera_zoom, 1.025)
             pil_frame = apply_camera_transform(
                 pil_frame,
                 zoom=camera_zoom,
@@ -155,6 +182,9 @@ class AnimationEngine:
                 progress=progress,
                 frame_index=frame_index,
                 scene_plan=scene_plan,
+                accent_icon=segment_style.accent_icon,
+                icon_count=segment_style.icon_count,
+                sparkle_phase=segment_style.sparkle_phase,
             )
             frames.append(np.array(pil_frame.convert("RGB")))
 
@@ -167,7 +197,7 @@ class AnimationEngine:
         total_words: int,
     ) -> int:
         if not timings:
-            return max(1, min(total_words, int(current_ms / 400) + 1))
+            return max(1, min(total_words, int(current_ms / 380) + 1))
         visible = sum(1 for timing in timings if timing.start_ms <= current_ms)
         if visible == 0 and total_words > 0:
             return 1
@@ -187,6 +217,8 @@ class AnimationEngine:
 
         if transition == "push":
             return self._apply_push_transition(frames_a, frames_b, blend_frames)
+        if transition == "wipe":
+            return self._apply_wipe_transition(frames_a, frames_b, blend_frames)
 
         blend_count = min(blend_frames, len(frames_a), len(frames_b))
         if blend_count < 2:
@@ -229,3 +261,28 @@ class AnimationEngine:
             canvas.paste(frame_b, (width - offset, 0))
             pushed.append(np.array(canvas))
         return frames_a[:-blend_count] + pushed + frames_b[blend_count:]
+
+    def _apply_wipe_transition(
+        self,
+        frames_a: List[np.ndarray],
+        frames_b: List[np.ndarray],
+        blend_frames: int,
+    ) -> List[np.ndarray]:
+        width = frames_a[0].shape[1]
+        height = frames_a[0].shape[0]
+        blend_count = min(blend_frames, len(frames_a), len(frames_b))
+        if blend_count < 2:
+            return frames_a + frames_b
+
+        wiped: List[np.ndarray] = []
+        for index in range(blend_count):
+            t = index / max(blend_count - 1, 1)
+            split_x = int(width * t)
+            canvas = Image.new("RGB", (width, height), (255, 255, 255))
+            frame_a = Image.fromarray(frames_a[-(blend_count - index)])
+            frame_b = Image.fromarray(self._resize_frame_array(frames_b[index], width, height))
+            canvas.paste(frame_a, (0, 0))
+            if split_x > 0:
+                canvas.paste(frame_b.crop((0, 0, split_x, height)), (0, 0))
+            wiped.append(np.array(canvas))
+        return frames_a[:-blend_count] + wiped + frames_b[blend_count:]

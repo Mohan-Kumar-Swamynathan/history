@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import math
+import random
 import re
 import sys
 from pathlib import Path
@@ -16,7 +17,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from icon_library import get_icon_paths, pick_icon_for_text  # noqa: E402
+from icon_library import ICONS, get_icon_paths, pick_icon_for_text  # noqa: E402
 from src.core.config_loader import CONFIG_DIR, get_output_dir
 from src.asset_engine.lottie_renderer import render_lottie_frame
 from src.core.models import ScenePlan
@@ -48,14 +49,33 @@ def get_emotion_palette(emotion: str) -> dict:
     }))
 
 
-def pick_scene_icons(text: str, hero_icon: str | None = None, max_icons: int = 1) -> List[str]:
+def pick_scene_icons(
+    text: str,
+    hero_icon: str | None = None,
+    max_icons: int = 2,
+    accent_icon: str | None = None,
+) -> List[str]:
+    icons: List[str] = []
     if hero_icon:
-        return [hero_icon]
-    icon = pick_icon_for_text(text)
-    if icon:
-        return [icon]
-    defaults = ["lightbulb", "star", "heart"]
-    return [defaults[len(text) % len(defaults)]]
+        icons.append(hero_icon)
+    if accent_icon and accent_icon not in icons:
+        icons.append(accent_icon)
+    keyword_icon = pick_icon_for_text(text)
+    if keyword_icon and keyword_icon not in icons:
+        icons.append(keyword_icon)
+    defaults = ["lightbulb", "star", "heart", "arrow_up", "bell"]
+    while len(icons) < max_icons:
+        candidate = defaults[len(text) % len(defaults)]
+        if candidate not in icons:
+            icons.append(candidate)
+        else:
+            for fallback in defaults:
+                if fallback not in icons:
+                    icons.append(fallback)
+                    break
+            else:
+                break
+    return icons[:max_icons]
 
 
 def get_icon_color(icon_name: str) -> Tuple[int, int, int]:
@@ -120,6 +140,54 @@ def _placement_coords(placement: str, width: int, height: int, icon_size: int) -
     return margin, int(height * 0.65)
 
 
+def _placement_coords(placement: str, width: int, height: int, icon_size: int) -> Tuple[int, int]:
+    margin = 80
+    if placement == "top_right":
+        return width - icon_size - margin, margin
+    if placement == "bottom_center":
+        return (width - icon_size) // 2, height - icon_size - margin
+    if placement == "left_margin":
+        return margin, int(height * 0.55)
+    if placement == "top_left":
+        return margin, margin + 40
+    if placement == "right_margin":
+        return width - icon_size - margin, int(height * 0.58)
+    return margin, int(height * 0.65)
+
+
+_ICON_PLACEMENTS = ("top_right", "left_margin", "bottom_center", "top_left", "right_margin")
+
+
+def _draw_floating_particles(
+    draw: ImageDraw.ImageDraw,
+    width: int,
+    height: int,
+    progress: float,
+    frame_index: int,
+    accent_rgb: tuple[int, int, int],
+    sparkle_phase: float,
+) -> None:
+    rng = random.Random(frame_index // 3 + int(sparkle_phase * 100))
+    particle_count = 6 + int(sparkle_phase * 4)
+    for particle_index in range(particle_count):
+        base_x = rng.randint(40, width - 40)
+        base_y = rng.randint(40, height - 40)
+        bob = math.sin((progress * 5 + particle_index + sparkle_phase * 6) * math.pi) * 16
+        size = 3 + (particle_index % 3)
+        alpha = 50 + int(35 * abs(math.sin((progress + particle_index) * math.pi)))
+        x = int(base_x + math.sin(progress * math.pi * 2 + particle_index) * 12)
+        y = int(base_y + bob)
+        draw.ellipse([x, y, x + size, y + size], fill=(*accent_rgb, alpha))
+
+
+def _apply_vignette(canvas: Image.Image, strength: int = 28) -> Image.Image:
+    width, height = canvas.size
+    vignette = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(vignette)
+    draw.ellipse([-width // 4, -height // 6, width + width // 4, height + height // 3], fill=(30, 30, 30, strength))
+    return Image.alpha_composite(canvas.convert("RGBA"), vignette)
+
+
 def composite_scene_decorations(
     base_frame: Image.Image,
     scene_text: str,
@@ -127,6 +195,9 @@ def composite_scene_decorations(
     progress: float,
     frame_index: int,
     scene_plan: ScenePlan | None = None,
+    accent_icon: str | None = None,
+    icon_count: int = 2,
+    sparkle_phase: float = 0.0,
 ) -> Image.Image:
     palette = get_emotion_palette(emotion)
     canvas = base_frame.copy().convert("RGBA")
@@ -138,33 +209,52 @@ def composite_scene_decorations(
     glow_rgb = palette.get("glow", [220, 220, 215])
     accent_rgb = palette.get("accent", [80, 80, 80])
 
-    wash_draw.ellipse([-80, -60, width // 2, height // 2], fill=(*wash_rgb, 35))
-    wash_draw.ellipse([width // 3, height // 2, width, height + 40], fill=(*glow_rgb, 25))
+    wash_draw.ellipse([-80, -60, width // 2, height // 2], fill=(*wash_rgb, 40))
+    wash_draw.ellipse([width // 3, height // 2, width, height + 40], fill=(*glow_rgb, 30))
+    wash_draw.rectangle([0, 0, width, 6], fill=(*accent_rgb, 18))
     canvas = Image.alpha_composite(canvas, wash)
+
+    particle_layer = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+    _draw_floating_particles(
+        ImageDraw.Draw(particle_layer),
+        width,
+        height,
+        progress,
+        frame_index,
+        tuple(accent_rgb),
+        sparkle_phase,
+    )
+    canvas = Image.alpha_composite(canvas, particle_layer)
 
     hero_icon = scene_plan.hero_icon if scene_plan else None
     placement = scene_plan.icon_placement if scene_plan else "bottom_left"
-    icons = pick_scene_icons(scene_text, hero_icon=hero_icon, max_icons=1)
+    icons = pick_scene_icons(
+        scene_text,
+        hero_icon=hero_icon,
+        max_icons=icon_count,
+        accent_icon=accent_icon,
+    )
 
     for slot_index, icon_name in enumerate(icons):
-        bob = int(math.sin((progress * 6 + slot_index) * math.pi) * 10)
-        pulse = 1.0 + 0.05 * math.sin((progress * 8 + frame_index * 0.15) * math.pi)
-        icon_size = int(160 * pulse)
-        icon_progress = min(1.0, progress * 1.2)
-        if icon_progress <= 0:
+        if icon_name not in ICONS:
             continue
-
+        bob = int(math.sin((progress * 6 + slot_index + sparkle_phase * 4) * math.pi) * 14)
+        pulse = 1.0 + 0.08 * math.sin((progress * 8 + frame_index * 0.12 + slot_index) * math.pi)
+        icon_size = int((140 if slot_index else 170) * pulse)
+        icon_progress = min(1.0, max(0.15, progress * 1.35 - slot_index * 0.08))
         icon_img = render_lottie_frame(icon_name, icon_progress, size=icon_size)
         if icon_img is None:
             icon_img = render_colored_icon(icon_name, icon_progress, size=icon_size)
-        base_x, base_y = _placement_coords(placement, width, height, icon_size)
-        paste_x = base_x
+        slot_placement = placement if slot_index == 0 else _ICON_PLACEMENTS[(slot_index + frame_index) % len(_ICON_PLACEMENTS)]
+        base_x, base_y = _placement_coords(slot_placement, width, height, icon_size)
+        paste_x = base_x + int(math.sin(progress * math.pi + slot_index) * 8)
         paste_y = base_y + bob
 
         glow = Image.new("RGBA", (icon_size + 40, icon_size + 40), (0, 0, 0, 0))
         glow_draw = ImageDraw.Draw(glow)
-        glow_draw.ellipse([10, 10, icon_size + 30, icon_size + 30], fill=(*accent_rgb, 40))
+        glow_draw.ellipse([10, 10, icon_size + 30, icon_size + 30], fill=(*accent_rgb, 50))
         canvas.paste(glow, (paste_x - 20, paste_y - 20), glow)
         canvas.paste(icon_img, (paste_x, paste_y), icon_img)
 
+    canvas = _apply_vignette(canvas, strength=22)
     return canvas.convert("RGB")
