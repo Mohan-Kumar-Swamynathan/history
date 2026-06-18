@@ -1,12 +1,20 @@
 name: Thulir Unified Pipeline
 
-# Single pipeline: long video (~5 min) + Shorts, twice daily, YouTube upload.
-# Uses generate_video.py → src/pipelines/ (unified framework).
+# ── Schedule ─────────────────────────────────────────────────────────
+# Peak Tamil YouTube audience times (IST):
+#   Morning : 07:00–09:00 (commute / morning routine)
+#   Evening : 19:00–21:00 (post-work / dinner)
+#
+# Upload 30 min BEFORE peak so YouTube indexes and pushes notifications
+# by the time viewers are active.
+#
+# Morning slot  → cron 01:30 UTC = 07:00 IST
+# Evening slot  → cron 13:30 UTC = 19:00 IST
 
 on:
   schedule:
-    - cron: "30 3 * * *"   # 09:00 IST — morning long + shorts
-    - cron: "30 13 * * *"  # 19:00 IST — evening long + shorts
+    - cron: "30 1 * * *"    # 07:00 IST — morning peak upload
+    - cron: "30 13 * * *"   # 19:00 IST — evening peak upload
   workflow_dispatch:
     inputs:
       daily_slot:
@@ -44,89 +52,180 @@ env:
   LLM_MODE:              hybrid
   LLM_CI_STRATEGY:       github_first
 
+# ── Shared step template (YAML anchor) ───────────────────────────────
+x-common-steps: &common-steps
+  - uses: actions/checkout@v4
+
+  - uses: actions/setup-python@v5
+    with:
+      python-version: "3.11"
+
+  - name: Install system dependencies
+    run: |
+      sudo apt-get update -qq
+      sudo apt-get install -y --no-install-recommends \
+        ffmpeg \
+        libcairo2-dev \
+        libpango1.0-dev \
+        fonts-noto \
+        fonts-noto-core \
+        fonts-noto-extra
+      pip install --upgrade pip
+      pip install -r requirements.txt
+
+  - name: Restore YouTube credentials
+    run: |
+      if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
+        echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+        echo "✅ youtube_token.pickle restored"
+      fi
+      if [ -n "$CLIENT_SECRETS_BASE64" ]; then
+        echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
+        echo "✅ client_secrets.json restored"
+      fi
+
+  - name: Persist topic history
+    if: always()
+    run: |
+      git config user.name  "Thulir Bot"
+      git config user.email "bot@thulir.local"
+      git add \
+        data/topic_history.json \
+        upload_state.json \
+        output/state/ \
+        2>/dev/null || true
+      git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
+      git push || true
+
 jobs:
+  # ── Morning upload (07:00 IST) ──────────────────────────────────────
   morning_bundle:
-    if: github.event.schedule == '30 3 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'morning_long')
+    if: >
+      github.event.schedule == '30 1 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'morning_long')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 55
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
+
+      - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            libcairo2-dev \
+            libpango1.0-dev \
+            fonts-noto \
+            fonts-noto-core \
+            fonts-noto-extra
+          pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Restore YouTube credentials
         run: |
           if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
             echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+            echo "✅ youtube_token.pickle restored"
           fi
           if [ -n "$CLIENT_SECRETS_BASE64" ]; then
             echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
           fi
-      - name: Generate long video + Shorts and upload
+
+      - name: Generate + upload (morning)
         run: |
           UPLOAD_FLAG=""
           if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
-          python generate_video.py --format long --daily-slot morning_long $UPLOAD_FLAG
-      - uses: actions/upload-artifact@v4
+          python generate_video.py \
+            --format long \
+            --daily-slot morning_long \
+            $UPLOAD_FLAG
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: thulir-morning-${{ github.run_id }}
           path: output/runs/**/*
           retention-days: 7
+
       - name: Persist topic history
         if: always()
         run: |
-          git config user.name "Thulir Bot"
+          git config user.name  "Thulir Bot"
           git config user.email "bot@thulir.local"
-          git add data/topic_history.json upload_state.json 2>/dev/null || true
+          git add data/topic_history.json upload_state.json output/state/ 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
           git push || true
 
+  # ── Evening upload (19:00 IST) ─────────────────────────────────────
   evening_bundle:
-    if: github.event.schedule == '30 13 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'evening_long')
+    if: >
+      github.event.schedule == '30 13 * * *' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'evening_long')
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 55
+
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
-      - name: Install dependencies
+
+      - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg libcairo2-dev libpango1.0-dev fonts-noto fonts-noto-core
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            ffmpeg \
+            libcairo2-dev \
+            libpango1.0-dev \
+            fonts-noto \
+            fonts-noto-core \
+            fonts-noto-extra
+          pip install --upgrade pip
           pip install -r requirements.txt
+
       - name: Restore YouTube credentials
         run: |
           if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
             echo "$YOUTUBE_TOKEN_BASE64" | base64 -d > youtube_token.pickle
+            echo "✅ youtube_token.pickle restored"
           fi
           if [ -n "$CLIENT_SECRETS_BASE64" ]; then
             echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
           fi
-      - name: Generate long video + Shorts and upload
+
+      - name: Generate + upload (evening)
         run: |
           UPLOAD_FLAG=""
           if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
-          python generate_video.py --format long --daily-slot evening_long $UPLOAD_FLAG
-      - uses: actions/upload-artifact@v4
+          python generate_video.py \
+            --format long \
+            --daily-slot evening_long \
+            $UPLOAD_FLAG
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: thulir-evening-${{ github.run_id }}
           path: output/runs/**/*
           retention-days: 7
+
       - name: Persist topic history
         if: always()
         run: |
-          git config user.name "Thulir Bot"
+          git config user.name  "Thulir Bot"
           git config user.email "bot@thulir.local"
-          git add data/topic_history.json upload_state.json 2>/dev/null || true
+          git add data/topic_history.json upload_state.json output/state/ 2>/dev/null || true
           git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
           git push || true
