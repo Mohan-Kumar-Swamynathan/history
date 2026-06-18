@@ -103,7 +103,10 @@ class ShortsRenderer:
         self.video_renderer.mux_audio(raw_path, narration_path, muxed_path, bgm_path, bgm_volume=bgm_volume)
 
         ass_path = self.subtitle_engine.write_ass(
-            narration_bundle.all_word_timings, run_dir / "shorts_subtitles.ass"
+            narration_bundle.all_word_timings,
+            run_dir / "shorts_subtitles.ass",
+            width=self.shorts_width,
+            height=self.shorts_height,
         )
         self.subtitle_engine.burn_ass_into_video(
             muxed_path,

@@ -9,7 +9,7 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_SHORTS_SCRIPT, should_use_llm
+from src.core.llm_policy import STAGE_SHORTS_SCRIPT, max_tokens_for_stage, should_derive_shorts_from_long, should_use_llm
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, ShortsScript, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import _expand_narration
@@ -30,7 +30,16 @@ class ShortsScriptGenerator:
     def __init__(self) -> None:
         self.validator = ScriptValidator()
 
-    def generate(self, topic: TopicCandidate, research: ResearchBrief) -> ShortsScript:
+    def generate(
+        self,
+        topic: TopicCandidate,
+        research: ResearchBrief,
+        long_script: NarrativeScript | None = None,
+    ) -> ShortsScript:
+        if long_script and should_derive_shorts_from_long():
+            log.info("Deriving Shorts script from long video beats (no extra LLM call)")
+            return self._generate_from_long_script(topic, long_script)
+
         if has_llm_credentials() and should_use_llm(STAGE_SHORTS_SCRIPT):
             try:
                 script = self._generate_with_llm(topic, research)
@@ -66,12 +75,17 @@ Return JSON array:
 [{{"beat_type":"hook","narration_ta":"...","emotion":"exciting","on_screen_text":"...",
 "visual_keywords":["street"],"retention_hook":"question"}}]"""
 
-        raw = generate_text(prompt, max_tokens=2000)
+        raw = generate_text(
+            prompt,
+            max_tokens=max_tokens_for_stage(STAGE_SHORTS_SCRIPT, 1200),
+            preferred="gemini",
+        )
         beats = self._parse_beats(raw, topic)
         return ShortsScript(topic=topic, beats=beats)
 
     def _generate_offline(self, topic: TopicCandidate) -> ShortsScript:
         p = topic.protagonist
+        screen_labels = self._shorts_screen_labels(topic)
         narrations = [
             prepend_greeting(_expand_narration(
                 f"{topic.hook_question} {p}-ன் கதை இது. {topic.situation or 'ஒரு சாதாரண வாழ்க்கை'}.", 16
@@ -90,13 +104,61 @@ Return JSON array:
                 narration_ta=narrations[index],
                 emotion=["exciting", "sad", "thinking", "inspirational", "exciting"][index],
                 protagonist=p,
-                on_screen_text=["!", "?", "திருப்புமுனை", "பாடம்", "துளிர்"][index],
+                on_screen_text=screen_labels[index],
                 visual_keywords=["street", "rain", "lightbulb", "star", "bell"][index: index + 1],
                 retention_hook=["question", "emotion", "twist", "reveal", "surprise"][index],
             )
             for index, beat_type in enumerate(SHORTS_BEAT_TYPES)
         ]
         return ShortsScript(topic=topic, beats=beats)
+
+    def _shorts_screen_labels(self, topic: TopicCandidate) -> List[str]:
+        protagonist = topic.protagonist
+        return [
+            topic.protagonist_age or topic.hook_question[:20] or protagonist,
+            "சவால்",
+            "திருப்புமுனை",
+            "பாடம்",
+            "துளிர்",
+        ]
+
+    def _generate_from_long_script(self, topic: TopicCandidate, long_script: NarrativeScript) -> ShortsScript:
+        beats_by_type: dict[BeatType, StoryBeat] = {}
+        for beat in long_script.beats:
+            if beat.beat_type not in beats_by_type:
+                beats_by_type[beat.beat_type] = beat
+
+        narrations: List[str] = []
+        for beat_type in SHORTS_BEAT_TYPES:
+            source_beat = beats_by_type.get(beat_type)
+            if source_beat:
+                narrations.append(self._compress_narration(source_beat.narration_ta, max_words=28))
+            else:
+                narrations.append(topic.hook_question)
+
+        narrations[0] = prepend_greeting(narrations[0], is_shorts=True)
+        narrations[-1] = append_outro_cta(narrations[-1], is_shorts=True)
+        screen_labels = self._shorts_screen_labels(topic)
+
+        beats = [
+            StoryBeat(
+                beat_type=beat_type,
+                narration_ta=narrations[index],
+                emotion=["exciting", "sad", "thinking", "inspirational", "exciting"][index],
+                protagonist=topic.protagonist,
+                on_screen_text=screen_labels[index],
+                visual_keywords=["street", "rain", "lightbulb", "star", "bell"][index : index + 1],
+                retention_hook=["question", "emotion", "twist", "reveal", "surprise"][index],
+            )
+            for index, beat_type in enumerate(SHORTS_BEAT_TYPES)
+        ]
+        return ShortsScript(topic=topic, beats=beats)
+
+    def _compress_narration(self, text: str, max_words: int = 28) -> str:
+        words = re.findall(r"\S+", text)
+        if len(words) <= max_words:
+            return text
+        return " ".join(words[:max_words]) + "..."
 
     def _parse_beats(self, raw: str, topic: TopicCandidate) -> List[StoryBeat]:
         match = re.search(r"\[.*\]", raw, re.DOTALL)

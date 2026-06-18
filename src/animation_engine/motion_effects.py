@@ -26,11 +26,12 @@ class MotionCalculator:
         bg_offset_x = int(-progress * 25 * self.camera_speed)
         bg_offset_y = int(math.sin(progress * math.pi * 2) * 4)
 
-        camera_zoom = 1.0 + progress * 0.045 * self.camera_speed
+        # Keep zoom subtle — aggressive center-crop hides corner-placed text and figures.
+        camera_zoom = 1.0 + progress * 0.012 * self.camera_speed
         if self.beat_type == BeatType.HOOK:
-            camera_zoom = 1.0 + progress * 0.07
+            camera_zoom = 1.0 + progress * 0.018
         elif self.beat_type == BeatType.TURNING_POINT:
-            camera_zoom = 1.02 + progress * 0.05
+            camera_zoom = 1.0 + progress * 0.015
 
         text_drift_y = int((1.0 - eased) * 18)
         word_pop = max(0.0, math.sin(frame_ratio * math.pi)) if frame_ratio < 1.0 else 0.0
@@ -74,14 +75,29 @@ def _ease_out_back(t: float) -> float:
     return 1 + c3 * pow(t - 1, 3) + c1 * pow(t - 1, 2)
 
 
-def apply_camera_transform(frame_image, zoom: float, pan_x: int, pan_y: int):
-    """Apply subtle Ken Burns zoom + pan to a PIL Image."""
+def apply_camera_transform(
+    frame_image,
+    zoom: float,
+    pan_x: int,
+    pan_y: int,
+    anchor: str = "top_left",
+):
+    """Apply subtle Ken Burns zoom + pan. Anchor top-left so narration text stays visible."""
     from PIL import Image
+
+    if zoom <= 1.001:
+        return frame_image
 
     width, height = frame_image.size
     crop_w = int(width / zoom)
     crop_h = int(height / zoom)
-    left = max(0, min(width - crop_w, (width - crop_w) // 2 + pan_x))
-    top = max(0, min(height - crop_h, (height - crop_h) // 2 + pan_y))
+
+    if anchor == "top_left":
+        left = max(0, min(width - crop_w, pan_x))
+        top = max(0, min(height - crop_h, pan_y))
+    else:
+        left = max(0, min(width - crop_w, (width - crop_w) // 2 + pan_x))
+        top = max(0, min(height - crop_h, (height - crop_h) // 2 + pan_y))
+
     cropped = frame_image.crop((left, top, left + crop_w, top + crop_h))
     return cropped.resize((width, height), Image.Resampling.LANCZOS)

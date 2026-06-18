@@ -28,16 +28,24 @@ class SubtitleEngine:
         output_path.write_text("\n".join(lines), encoding="utf-8")
         return output_path
 
-    def write_ass(self, word_timings: List[WordTiming], output_path: Path) -> Path:
+    def write_ass(
+        self,
+        word_timings: List[WordTiming],
+        output_path: Path,
+        width: int = 1920,
+        height: int = 1080,
+    ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        header = """[Script Info]
+        margin_v = 80 if height > width else 140
+        font_size = 56 if height <= width else 48
+        header = f"""[Script Info]
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: {width}
+PlayResY: {height}
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Default,Noto Sans Tamil,56,&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,80,80,60,1
+Style: Default,Noto Sans Tamil,{font_size},&H00000000,&H000000FF,&H00FFFFFF,&H00000000,1,0,0,0,100,100,0,0,1,3,0,2,80,80,{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -196,7 +204,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 break
 
         x_cursor = 80
-        y_base = height - 90
+        y_base = height - (140 if height > width else 90)
         for timing in line_words:
             color = highlight_color if timing.word == current_word else normal_color
             draw.text((x_cursor, y_base), timing.word, font=font, fill=color)

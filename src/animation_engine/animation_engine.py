@@ -26,6 +26,10 @@ from src.animation_engine.documentary_scenes import render_documentary_scene
 from src.core.models import AnimationPlan, ScenePlan, SceneType, WordTiming  # noqa: E402
 
 
+SHORTS_VISUAL_CHANGE_SECONDS = 1.5
+LONG_VISUAL_CHANGE_SECONDS = 2.5
+
+
 class AnimationEngine:
     def __init__(self) -> None:
         platform = load_platform_config()
@@ -66,41 +70,52 @@ class AnimationEngine:
         duration = duration_seconds or scene_plan.beat.duration_seconds
         total_frames = max(int(duration * self.fps), self.fps * 2)
         beat_timings = word_timings or []
-        use_documentary = scene_plan.scene_type in {
-            SceneType.STATISTIC,
-            SceneType.TIMELINE,
-            SceneType.MAP,
-        }
+        use_documentary = (
+            not is_shorts
+            and scene_plan.scene_type in {
+                SceneType.STATISTIC,
+                SceneType.TIMELINE,
+                SceneType.MAP,
+            }
+        )
 
         if use_documentary:
             doc_frames = render_documentary_scene(scene_plan, total_frames, self.fps)
             return doc_frames, beat_timings
 
-        bg_draw_fn = pick_background(scene_plan.beat.narration_ta, scene_index)
-        if bg_draw_fn is not None:
-            tint_key = tint_key_from_background(scene_plan.background_key)
-            bg_draw_fn = wrap_background_with_color(bg_draw_fn, tint_key)
         motion = MotionCalculator(scene_plan.emotion, scene_plan.beat.beat_type)
         frames: List[np.ndarray] = []
         previous_visible = 0
+        visual_interval = SHORTS_VISUAL_CHANGE_SECONDS if is_shorts else LONG_VISUAL_CHANGE_SECONDS
+        segment_frames = max(int(self.fps * visual_interval), self.fps)
 
         for frame_index in range(total_frames):
             current_ms = int((frame_index / self.fps) * 1000)
             progress = frame_index / max(total_frames - 1, 1)
             visible_words = self._visible_word_count(beat_timings, current_ms, len(words))
-            motion_params = motion.compute(progress, frame_ratio=1.0)
+            visual_segment = frame_index // segment_frames
+            segment_progress = (frame_index % segment_frames) / max(segment_frames - 1, 1)
+            motion_params = motion.compute(segment_progress, frame_ratio=segment_progress)
 
             word_just_appeared = visible_words > previous_visible
             word_pop = 1.0 if word_just_appeared else max(0.0, 1.0 - (frame_index % 8) / 8.0)
             previous_visible = visible_words
 
+            bg_seed = scene_index * 100 + visual_segment + hash(scene_plan.background_key) % 17
+            bg_draw_fn = pick_background(scene_plan.beat.narration_ta, bg_seed)
+            if bg_draw_fn is not None:
+                tint_key = tint_key_from_background(scene_plan.background_key)
+                bg_draw_fn = wrap_background_with_color(bg_draw_fn, tint_key)
+
+            figure_base = 0.18 if is_shorts else 0.08
+            bg_base = 0.22 if is_shorts else 0.10
             figure_progress = min(
                 1.0,
-                progress * float(motion_params["figure_progress_multiplier"]),
+                figure_base + segment_progress * float(motion_params["figure_progress_multiplier"]),
             )
             bg_progress = min(
                 1.0,
-                progress * float(motion_params["bg_progress_multiplier"]),
+                bg_base + segment_progress * float(motion_params["bg_progress_multiplier"]),
             )
 
             pil_frame = render_frame(
@@ -115,7 +130,7 @@ class AnimationEngine:
                 total_scenes=total_scenes,
                 is_shorts=is_shorts,
                 on_screen_text=scene_plan.beat.on_screen_text or "",
-                figure_offset_x=int(motion_params["figure_offset_x"]),
+                figure_offset_x=int(motion_params["figure_offset_x"] * (0.25 if is_shorts else 1.0)),
                 figure_offset_y=int(motion_params["figure_offset_y"]),
                 bg_offset_x=int(motion_params["bg_offset_x"]),
                 bg_offset_y=int(motion_params["bg_offset_y"]),
@@ -123,11 +138,15 @@ class AnimationEngine:
                 word_pop=word_pop if word_just_appeared or visible_words == len(words) else word_pop * 0.3,
             )
 
+            camera_zoom = float(motion_params["camera_zoom"])
+            if is_shorts:
+                camera_zoom = min(camera_zoom, 1.02)
             pil_frame = apply_camera_transform(
                 pil_frame,
-                zoom=float(motion_params["camera_zoom"]),
+                zoom=camera_zoom,
                 pan_x=int(motion_params["camera_pan_x"]),
                 pan_y=int(motion_params["camera_pan_y"]),
+                anchor="top_left",
             )
             pil_frame = composite_scene_decorations(
                 pil_frame,

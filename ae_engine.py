@@ -434,7 +434,27 @@ def render_frame(
     img  = Image.new("RGB", (W, H), WHITE)
     draw = ImageDraw.Draw(img)
 
-    # ── Layout constants ─────────────────────────────────────────────
+    if is_shorts:
+        return _render_shorts_frame(
+            draw=draw,
+            img=img,
+            all_words=all_words,
+            visible=visible,
+            figure_progress=figure_progress,
+            bg_progress=bg_progress,
+            emotion=emotion,
+            protagonist=protagonist,
+            bg_draw_fn=bg_draw_fn,
+            on_screen_text=on_screen_text,
+            figure_offset_x=figure_offset_x,
+            figure_offset_y=figure_offset_y,
+            bg_offset_x=bg_offset_x,
+            bg_offset_y=bg_offset_y,
+            text_drift_y=text_drift_y,
+            word_pop=word_pop,
+        )
+
+    # ── Layout constants (landscape 16:9) ─────────────────────────────
     FIG_SIZE = 400
     BG_W, BG_H = 580, 500
     if is_shorts:
@@ -522,6 +542,110 @@ def render_frame(
         if y > H - 90: break
 
     # Cursor blink after last word
+    if visible < total_w:
+        ch_h = draw.textbbox((0, 0), "A", font=_f("ta", sz))[3]
+        draw.rectangle([last_x + 4, y - lh_px, last_x + 9, y - lh_px + ch_h], fill=INK)
+
+    return img
+
+
+def _render_shorts_frame(
+    draw,
+    img,
+    all_words: List[str],
+    visible: int,
+    figure_progress: float,
+    bg_progress: float,
+    emotion: str,
+    protagonist: str,
+    bg_draw_fn,
+    on_screen_text: str,
+    figure_offset_x: int,
+    figure_offset_y: int,
+    bg_offset_x: int,
+    bg_offset_y: int,
+    text_drift_y: int,
+    word_pop: float,
+) -> Image.Image:
+    """9:16 vertical layout — headline top, visuals lower third, text always on-screen."""
+    FIG_SIZE = 260
+    BG_W, BG_H = 360, 300
+    TEXT_X = 50
+    TEXT_W = W - 100
+    HEADLINE_Y = 48 + text_drift_y
+    TEXT_Y = 200 + text_drift_y
+
+    # ── Headline badge (on_screen_text) — visible from frame 0 ────────
+    headline = (on_screen_text or "").strip()
+    if not headline and all_words:
+        headline = all_words[0]
+    if headline:
+        badge_sz = 52
+        badge_text = headline[:28]
+        badge_w = _tw(draw, badge_text, badge_sz) + 48
+        badge_x = max(40, (W - badge_w) // 2)
+        draw.rounded_rectangle(
+            [badge_x, HEADLINE_Y, badge_x + badge_w, HEADLINE_Y + 72],
+            radius=16,
+            fill=RED,
+        )
+        _dt(draw, badge_text, badge_x + 24, HEADLINE_Y + 10, badge_sz, WHITE)
+
+    # ── Lower-third visuals (centered) ────────────────────────────────
+    visual_center_x = W // 2
+    BG_X = visual_center_x - BG_W // 2 + bg_offset_x
+    BG_Y = int(H * 0.52) + bg_offset_y
+    FIG_X = visual_center_x - FIG_SIZE // 2 + 120 + figure_offset_x
+    FIG_Y = BG_Y + BG_H - 40 + figure_offset_y
+
+    if bg_draw_fn is not None and bg_progress > 0.02:
+        bg_img = render_background_svg(bg_draw_fn, bg_progress, BG_W, BG_H)
+        img.paste(bg_img, (BG_X, BG_Y), bg_img)
+
+    if figure_progress > 0.02:
+        fig = render_figure_svg(emotion, figure_progress, FIG_SIZE)
+        img.paste(fig, (FIG_X, FIG_Y), fig)
+        if figure_progress > 0.65:
+            name_w = _tw(draw, protagonist, 28)
+            _dt(
+                draw,
+                protagonist,
+                FIG_X + (FIG_SIZE - name_w) // 2,
+                FIG_Y + FIG_SIZE + 6,
+                28,
+                GREY,
+            )
+
+    # ── Main narration text — full width, top area, from first word ─────
+    words_vis = all_words[: max(visible, 1)]
+    total_w = len(all_words)
+
+    for sz in [88, 76, 64, 56, 48]:
+        lines = _wrap(words_vis, sz, TEXT_W, draw)
+        lh = draw.textbbox((0, 0), "A", font=_f("ta", sz))[3] + 20
+        if TEXT_Y + len(lines) * lh < int(H * 0.48):
+            break
+
+    y, wi = TEXT_Y, 0
+    last_x = TEXT_X
+    for li, lw in enumerate(lines):
+        x = TEXT_X
+        fsz = sz if li == 0 else max(42, sz - 12)
+        for word in lw:
+            is_curr = (wi == visible - 1) and (visible < total_w)
+            is_final = (wi == visible - 1) and (visible == total_w)
+            col = RED if is_curr else (GREY if is_final else INK)
+            draw_y = y
+            if is_curr and word_pop > 0:
+                draw_y = y - int((1.0 - word_pop) * 18)
+            last_x = _dt(draw, word + " ", x, draw_y, fsz, col)
+            x = last_x
+            wi += 1
+        lh_px = draw.textbbox((0, 0), "A", font=_f("ta", fsz))[3] + 20
+        y += lh_px
+        if y > int(H * 0.48):
+            break
+
     if visible < total_w:
         ch_h = draw.textbbox((0, 0), "A", font=_f("ta", sz))[3]
         draw.rectangle([last_x + 4, y - lh_px, last_x + 9, y - lh_px + ch_h], fill=INK)

@@ -191,6 +191,101 @@ def test_channel_greeting_and_outro():
     assert "like" in closed.lower()
 
 
+def test_topic_deduplicator_blocks_repeat_protagonist(tmp_path, monkeypatch):
+    from src.topic.topic_deduplicator import TopicDeduplicator, TRACKED_HISTORY
+
+    history_path = tmp_path / "topic_history.json"
+    history_path.write_text(
+        '[{"title_ta":"Old story","protagonist":"Nokia","fingerprint":"old story"}]',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("src.topic.topic_deduplicator.TRACKED_HISTORY", history_path)
+
+    deduplicator = TopicDeduplicator()
+    candidate = TopicCandidate(
+        title_ta="Nokia மறுபடியும்",
+        protagonist="Nokia",
+        curiosity_score=8.0,
+        emotion_score=8.0,
+        story_score=8.0,
+        lesson_score=7.5,
+    )
+    assert deduplicator.is_duplicate(candidate) is True
+
+
+def test_hybrid_mode_uses_llm_for_topic_and_script_only():
+    from src.core.llm_policy import (
+        STAGE_LONG_SCRIPT,
+        STAGE_METADATA,
+        STAGE_RESEARCH,
+        STAGE_SHORTS_SCRIPT,
+        STAGE_TOPIC,
+        should_derive_shorts_from_long,
+        should_use_llm,
+        topic_candidate_count,
+    )
+
+    import os
+    old = os.environ.get("LLM_MODE")
+    os.environ["LLM_MODE"] = "hybrid"
+    try:
+        assert should_use_llm(STAGE_TOPIC) is True
+        assert should_use_llm(STAGE_LONG_SCRIPT) is True
+        assert should_use_llm(STAGE_SHORTS_SCRIPT) is False
+        assert should_use_llm(STAGE_RESEARCH) is False
+        assert should_use_llm(STAGE_METADATA) is False
+        assert should_derive_shorts_from_long() is True
+        assert topic_candidate_count(20) == 5
+    finally:
+        if old:
+            os.environ["LLM_MODE"] = old
+        else:
+            os.environ.pop("LLM_MODE", None)
+
+
+def test_shorts_frame_renders_visible_main_text():
+    import ae_engine
+    from ae_engine import pick_background, render_frame
+    from src.animation_engine.animation_engine import AnimationEngine
+    from src.core.models import BeatType, ScenePlan, SceneType, StoryBeat, VisualStyle
+
+    ae_engine.W, ae_engine.H = 1080, 1920
+    beat = StoryBeat(
+        beat_type=BeatType.HOOK,
+        narration_ta="வணக்கம் துளிர் கதை இன்று",
+        emotion="exciting",
+        protagonist="அர்ஜுன்",
+        on_screen_text="24 வயது",
+    )
+    scene_plan = ScenePlan(
+        beat=beat,
+        scene_type=SceneType.CHARACTER,
+        visual_style=VisualStyle.WHITEBOARD,
+        camera="slow_zoom",
+        emotion="exciting",
+        assets=[],
+        protagonist="அர்ஜுன்",
+        background_key="clean",
+        hero_icon="lightbulb",
+        icon_placement="top_right",
+    )
+    engine = AnimationEngine()
+    animation_plan = engine.build_animation_plan(scene_plan)
+    frames, _ = engine.render_scene_frames(
+        scene_plan,
+        animation_plan,
+        scene_index=0,
+        total_scenes=1,
+        duration_seconds=2.0,
+        is_shorts=True,
+    )
+    assert frames
+    frame = frames[12]
+    # Headline + narration region should contain ink (not blank white canvas).
+    ink_pixels = int((frame[:900, :, :] < 240).any(axis=2).sum())
+    assert ink_pixels > 200
+
+
 def test_story_mode_enum_values():
     assert StoryMode.BIOGRAPHICAL.value == "biographical"
     assert ContentBucket.BUSINESS.value == "business"

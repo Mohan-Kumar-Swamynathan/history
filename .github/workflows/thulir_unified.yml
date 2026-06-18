@@ -37,7 +37,7 @@ env:
   GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
   GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
   PYTHONUNBUFFERED:      "1"
-  LLM_MODE:              minimal
+  LLM_MODE:              hybrid
 
 jobs:
   morning_bundle:
@@ -74,6 +74,14 @@ jobs:
           name: thulir-morning-${{ github.run_id }}
           path: output/runs/**/*
           retention-days: 7
+      - name: Persist topic history
+        if: always()
+        run: |
+          git config user.name "Thulir Bot"
+          git config user.email "bot@thulir.local"
+          git add data/topic_history.json upload_state.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
+          git push || true
 
   evening_bundle:
     if: github.event.schedule == '30 13 * * *' || (github.event_name == 'workflow_dispatch' && github.event.inputs.daily_slot == 'evening_long')
@@ -109,3 +117,11 @@ jobs:
           name: thulir-evening-${{ github.run_id }}
           path: output/runs/**/*
           retention-days: 7
+      - name: Persist topic history
+        if: always()
+        run: |
+          git config user.name "Thulir Bot"
+          git config user.email "bot@thulir.local"
+          git add data/topic_history.json upload_state.json 2>/dev/null || true
+          git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
+          git push || true

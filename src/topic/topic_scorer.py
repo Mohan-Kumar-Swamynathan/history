@@ -6,31 +6,32 @@ import json
 import logging
 import random
 import re
-from datetime import datetime
-from pathlib import Path
 from typing import List, Optional
 
 import yaml
 
 from src.core.config_loader import CONFIG_DIR, get_output_dir, load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_TOPIC, should_use_llm, topic_candidate_count
+from src.core.llm_policy import STAGE_TOPIC, max_tokens_for_stage, should_use_llm, topic_candidate_count
 from src.core.models import ContentBucket, StoryMode, TopicCandidate
+from src.topic.topic_deduplicator import TopicDeduplicator
 
 log = logging.getLogger(__name__)
 
-STATE_FILE = get_output_dir() / "state" / "topic_history.json"
 ROTATION_FILE = get_output_dir() / "state" / "content_mix_rotation.json"
 
 
 class TopicScorer:
+    def __init__(self) -> None:
+        self.deduplicator = TopicDeduplicator()
+
     def discover_topic(
         self,
         category: Optional[str] = None,
         content_bucket: Optional[ContentBucket] = None,
     ) -> TopicCandidate:
         topics_config = load_topics_config()
-        used_titles = self._load_used_titles()
+        used_titles = self.deduplicator.load_used_titles()
         target_bucket = content_bucket or self._pick_content_bucket()
 
         if has_llm_credentials() and should_use_llm(STAGE_TOPIC):
@@ -66,7 +67,8 @@ Rules:
 - Composite mode: fictional Tamil name in real situation (salary, rejection, anxiety)
 - Reject generic titles like "work hard" or "success secrets"
 
-Already used (avoid): {used_titles[-15:]}
+Already used — DO NOT repeat these titles or protagonists:
+{self.deduplicator.recent_avoid_list(20)}
 
 Return JSON array of {count} objects:
 [{{"title_ta":"...","hook":"...","protagonist":"...","protagonist_age":"...",
@@ -76,7 +78,11 @@ Return JSON array of {count} objects:
 "wikipedia_subject":"English Wikipedia title if biographical else empty",
 "curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}]"""
 
-        raw = generate_text(prompt, max_tokens=min(3000, count * 250))
+        raw = generate_text(
+            prompt,
+            max_tokens=max_tokens_for_stage(STAGE_TOPIC, 1500),
+            preferred="gemini",
+        )
         candidates = _parse_candidate_array(raw)
         return [self._normalize_candidate(item) for item in candidates if item]
 
@@ -84,10 +90,12 @@ Return JSON array of {count} objects:
         topics_config = load_topics_config()
         min_score = float(topics_config.get("min_accept_score", 7.5))
         blocklist = topics_config.get("blocklist_patterns", [])
-        used_titles = self._load_used_titles()
+        used_titles = self.deduplicator.load_used_titles()
 
         valid: List[TopicCandidate] = []
         for candidate in candidates:
+            if self.deduplicator.is_duplicate(candidate):
+                continue
             if candidate.title_ta in used_titles:
                 continue
             if self._matches_blocklist(candidate, blocklist):
@@ -114,21 +122,7 @@ Return JSON array of {count} objects:
         return winner
 
     def record_topic(self, topic: TopicCandidate) -> None:
-        STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
-        history = []
-        if STATE_FILE.exists():
-            history = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        history.append(
-            {
-                "title_ta": topic.title_ta,
-                "category": topic.category,
-                "content_bucket": topic.content_bucket.value,
-                "recorded_at": datetime.utcnow().isoformat(),
-            }
-        )
-        dedup_days = load_topics_config().get("dedup_days", 30)
-        history = history[-dedup_days:]
-        STATE_FILE.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
+        self.deduplicator.record_topic(topic)
 
     def _discover_with_llm(self, bucket: ContentBucket, used_titles: List[str]) -> TopicCandidate:
         count = int(load_topics_config().get("candidate_count", 20))
@@ -158,14 +152,14 @@ Return JSON array of {count} objects:
         pool = self._offline_candidate_pool(bucket, used_titles)
         if not pool:
             pool = self._load_fallback_topics_from_yaml()
-        available = [topic for topic in pool if topic.title_ta not in used_titles] or pool
+        available = [topic for topic in pool if not self.deduplicator.is_duplicate(topic)] or pool
         chosen = random.choice(available)
         return chosen.model_copy(update={"source": "offline"})
 
     def _offline_candidate_pool(self, bucket: ContentBucket, used_titles: List[str]) -> List[TopicCandidate]:
         return [
             topic for topic in self._load_fallback_topics_from_yaml()
-            if topic.content_bucket == bucket and topic.title_ta not in used_titles
+            if topic.content_bucket == bucket and not self.deduplicator.is_duplicate(topic)
         ]
 
     def _load_fallback_topics_from_yaml(self) -> List[TopicCandidate]:
@@ -179,10 +173,7 @@ Return JSON array of {count} objects:
         return topics or _builtin_fallback_topics()
 
     def _load_used_titles(self) -> List[str]:
-        if not STATE_FILE.exists():
-            return []
-        history = json.loads(STATE_FILE.read_text(encoding="utf-8"))
-        return [entry["title_ta"] for entry in history]
+        return self.deduplicator.load_used_titles()
 
     def _matches_blocklist(self, candidate: TopicCandidate, patterns: List[str]) -> bool:
         haystack = f"{candidate.title_ta} {candidate.hook} {candidate.lesson}".lower()

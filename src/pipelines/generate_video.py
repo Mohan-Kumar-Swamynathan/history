@@ -76,21 +76,9 @@ class VideoPipeline:
         if video_format == "short":
             return self._run_shorts_only(run_id, run_dir, topic, research, skip_upload, daily_slot)
 
-        package = self._run_long_video(run_id, run_dir, topic, research, skip_upload, daily_slot)
-
-        if include_shorts:
-            shorts_script = self.shorts_script_generator.generate(topic, research)
-            shorts_path = run_dir / "shorts.mp4"
-            shorts_result = self.shorts_renderer.render_shorts(shorts_script, shorts_path, run_dir, research=research)
-            if shorts_result:
-                package.shorts_video_path = str(shorts_result)
-                if not skip_upload:
-                    self.youtube_publisher.upload_shorts(
-                        shorts_result,
-                        package.metadata,
-                        topic,
-                        slug=hashlib.md5(f"{topic.title_ta}-shorts".encode()).hexdigest()[:12],
-                    )
+        package = self._run_long_video(
+            run_id, run_dir, topic, research, skip_upload, daily_slot, include_shorts=include_shorts
+        )
 
         if daily_slot:
             try:
@@ -108,6 +96,7 @@ class VideoPipeline:
         research,
         skip_upload: bool,
         daily_slot: Optional[str],
+        include_shorts: bool = True,
     ) -> VideoPackage:
         script = self.narrative_generator.generate(topic, research)
         beats = self.beat_extractor.extract(script)
@@ -213,6 +202,23 @@ class VideoPipeline:
             metadata=metadata,
             format="long",
         )
+
+        if include_shorts:
+            shorts_script = self.shorts_script_generator.generate(topic, research, long_script=script)
+            shorts_path = run_dir / "shorts.mp4"
+            shorts_result = self.shorts_renderer.render_shorts(
+                shorts_script, shorts_path, run_dir, research=research
+            )
+            if shorts_result:
+                package.shorts_video_path = str(shorts_result)
+                if not skip_upload:
+                    self.youtube_publisher.upload_shorts(
+                        shorts_result,
+                        metadata,
+                        topic,
+                        slug=hashlib.md5(f"{topic.title_ta}-shorts".encode()).hexdigest()[:12],
+                    )
+
         (run_dir / "manifest.json").write_text(package.model_dump_json(indent=2), encoding="utf-8")
         log.info("Run %s — complete: %s (%.0fs)", run_id, final_video_path, narration_bundle.total_duration_seconds)
         return package

@@ -9,7 +9,7 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_LONG_SCRIPT, resolve_llm_mode, should_use_llm
+from src.core.llm_policy import STAGE_LONG_SCRIPT, max_tokens_for_stage, resolve_llm_mode, should_use_llm
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_EMOTIONS, build_offline_long_script, resolve_long_beat_order
@@ -82,7 +82,11 @@ Return JSON array of {beat_count} objects:
 "on_screen_text":"Age 10","visual_keywords":["street","newspaper"],
 "retention_hook":"question","open_loop":"..."}}]"""
 
-        raw = generate_text(prompt, max_tokens=16000)
+        raw = generate_text(
+            prompt,
+            max_tokens=max_tokens_for_stage(STAGE_LONG_SCRIPT, 8000),
+            preferred="gemini",
+        )
         beats = self._parse_beats(raw, topic)
         if beats:
             beats[0] = beats[0].model_copy(

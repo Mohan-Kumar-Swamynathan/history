@@ -1,24 +1,33 @@
-"""LLM usage policy — reduce calls and rate-limit pressure in CI."""
+"""LLM usage policy — efficient hybrid mode with minimal redundant calls."""
 
 from __future__ import annotations
 
 import os
 
-LLM_MODE = os.environ.get("LLM_MODE", "auto").lower()
-
-# Stages that may call an LLM
 STAGE_TOPIC = "topic"
 STAGE_RESEARCH = "research"
 STAGE_LONG_SCRIPT = "long_script"
 STAGE_SHORTS_SCRIPT = "shorts_script"
 STAGE_METADATA = "metadata"
 
+# hybrid: topic + long script only (shorts derived from long — no extra LLM call)
+HYBRID_LLM_STAGES = frozenset({STAGE_TOPIC, STAGE_LONG_SCRIPT})
+
+STAGE_MAX_TOKENS = {
+    STAGE_TOPIC: 1500,
+    STAGE_RESEARCH: 800,
+    STAGE_LONG_SCRIPT: 8000,
+    STAGE_SHORTS_SCRIPT: 1200,
+    STAGE_METADATA: 1000,
+}
+
 
 def resolve_llm_mode() -> str:
-    if LLM_MODE in {"offline", "minimal", "full"}:
-        return LLM_MODE
+    mode = os.environ.get("LLM_MODE", "auto").lower()
+    if mode in {"offline", "minimal", "hybrid", "full", "auto"}:
+        return mode
     if os.environ.get("GITHUB_ACTIONS") == "true":
-        return "minimal"
+        return "hybrid"
     return "auto"
 
 
@@ -26,13 +35,26 @@ def should_use_llm(stage: str) -> bool:
     mode = resolve_llm_mode()
     if mode in {"offline", "minimal"}:
         return False
+    if mode == "hybrid":
+        return stage in HYBRID_LLM_STAGES
     return True
+
+
+def should_derive_shorts_from_long() -> bool:
+    """In hybrid mode, compress long-script beats instead of a separate LLM call."""
+    return resolve_llm_mode() == "hybrid"
 
 
 def topic_candidate_count(default: int = 20) -> int:
     mode = resolve_llm_mode()
     if mode in {"minimal", "offline"}:
         return 0
+    if mode == "hybrid":
+        return 5
     if mode == "auto":
         return min(default, 8)
     return default
+
+
+def max_tokens_for_stage(stage: str, fallback: int = 4096) -> int:
+    return STAGE_MAX_TOKENS.get(stage, fallback)
