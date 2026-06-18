@@ -18,6 +18,15 @@ from pathlib import Path
 from typing import List, Tuple, Optional
 import cairosvg
 from PIL import Image, ImageDraw, ImageFont
+
+try:
+    from src.asset_engine.scene_panel_engine import render_scene_panel as _render_panel
+    _PANEL_AVAILABLE = True
+except Exception:
+    _PANEL_AVAILABLE = False
+    def _render_panel(*a, **kw):
+        from PIL import Image
+        return Image.new("RGBA", (640, 680), (250, 248, 242, 255))
 import numpy as np
 
 W, H = 1920, 1080
@@ -511,8 +520,10 @@ def render_frame(
     layout_mirror   : bool = False,
     figure_scale    : float = 1.0,
     beat_type       : str = "",
-    frame_index     : int = 0,
-    fps             : int = 24,
+    frame_index        : int = 0,
+    fps                : int = 24,
+    visual_keywords    : list | None = None,
+    scene_index_for_panel: int = 0,
 ) -> Image.Image:
 
     img  = Image.new("RGB", (W, H), WHITE)
@@ -557,15 +568,30 @@ def render_frame(
     draw = ImageDraw.Draw(img)
     _apply_paper_wash(draw, W, H)
 
-    # ── 1. Scene background ───────────────────────────────────────────
-    if bg_draw_fn is not None and bg_progress > 0.02:
+    # ── 1. Scene panel (illustrated environment + prop) ─────────────
+    PANEL_W, PANEL_H = 640, 680
+    panel_x = BG_X
+    panel_y = BG_Y - 40
+
+    if _PANEL_AVAILABLE and bg_progress > 0.02:
+        panel = _render_panel(
+            narration_text=" ".join(all_words),
+            visual_keywords=visual_keywords or [],
+            scene_index=scene_index_for_panel,
+            progress=bg_progress,
+            size=(PANEL_W, PANEL_H),
+        )
+        img.paste(panel, (panel_x, panel_y), panel)
+        # pencil cursor tip while panel is drawing in
+        if 0.04 < bg_progress < 0.90:
+            pencil = get_pencil(64)
+            tip_x = panel_x + int(PANEL_W * min(0.85, bg_progress * 0.95))
+            tip_y = panel_y + int(PANEL_H * min(0.80, bg_progress * 0.75))
+            img.paste(pencil, (max(0, tip_x - 50), max(0, tip_y - 55)), pencil)
+    elif bg_draw_fn is not None and bg_progress > 0.02:
+        # fallback: old small SVG background
         bg_img = render_background_svg(bg_draw_fn, bg_progress, BG_W, BG_H)
         img.paste(bg_img, (BG_X, BG_Y), bg_img)
-        if 0.04 < bg_progress < 0.95:
-            pencil = get_pencil(64)
-            tip_x = BG_X + int(BG_W * min(0.85, bg_progress * 0.9))
-            tip_y = BG_Y + int(BG_H * min(0.75, bg_progress * 0.7))
-            img.paste(pencil, (max(0, tip_x - 50), max(0, tip_y - 55)), pencil)
 
     # ── 2. Stick figure ───────────────────────────────────────────────
     if figure_progress > 0.02:
