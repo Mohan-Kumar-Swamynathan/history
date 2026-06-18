@@ -286,6 +286,43 @@ def test_shorts_frame_renders_visible_main_text():
     assert ink_pixels > 200
 
 
+def test_ci_strategy_prefers_github_on_actions(monkeypatch):
+    from src.core.llm_registry import resolve_ci_strategy, resolve_provider_order
+
+    monkeypatch.delenv("LLM_CI_STRATEGY", raising=False)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_TOKEN", "test-token")
+    monkeypatch.delenv("GEMINI_KEY", raising=False)
+    assert resolve_ci_strategy() == "github_first"
+    assert resolve_provider_order()[0] == "github"
+
+
+def test_provider_exhausted_skipped_for_session(monkeypatch):
+    from src.core.llm_registry import mark_provider_exhausted, reset_provider_registry, resolve_provider_order
+
+    reset_provider_registry()
+    monkeypatch.setenv("GEMINI_KEY", "g")
+    monkeypatch.setenv("GROQ_API_KEY", "q")
+    monkeypatch.setenv("GITHUB_TOKEN", "gh")
+    monkeypatch.setenv("LLM_CI_STRATEGY", "full_chain")
+    mark_provider_exhausted("gemini")
+    mark_provider_exhausted("groq")
+    order = resolve_provider_order()
+    assert order == ["github"]
+
+
+def test_extract_json_array_handles_markdown_fence():
+    from src.core.llm_json_parser import extract_json_array
+
+    raw = """Here are topics:
+```json
+[{"title_ta":"Test","protagonist":"Hero","curiosity_score":8}]
+```"""
+    parsed = extract_json_array(raw)
+    assert len(parsed) == 1
+    assert parsed[0]["protagonist"] == "Hero"
+
+
 def test_story_mode_enum_values():
     assert StoryMode.BIOGRAPHICAL.value == "biographical"
     assert ContentBucket.BUSINESS.value == "business"

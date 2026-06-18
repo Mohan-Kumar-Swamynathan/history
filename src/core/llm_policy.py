@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import os
 
+from src.core.llm_registry import log_execution_plan, preferred_provider
+
 STAGE_TOPIC = "topic"
 STAGE_RESEARCH = "research"
 STAGE_LONG_SCRIPT = "long_script"
@@ -58,3 +60,17 @@ def topic_candidate_count(default: int = 20) -> int:
 
 def max_tokens_for_stage(stage: str, fallback: int = 4096) -> int:
     return STAGE_MAX_TOKENS.get(stage, fallback)
+
+
+def active_llm_stages() -> list[str]:
+    return [stage for stage in HYBRID_LLM_STAGES if should_use_llm(stage)]
+
+
+def preferred_provider_for_stage(stage: str) -> str | None:
+    if not should_use_llm(stage):
+        return None
+    return preferred_provider()
+
+
+def log_pipeline_llm_plan() -> None:
+    log_execution_plan(resolve_llm_mode(), active_llm_stages())

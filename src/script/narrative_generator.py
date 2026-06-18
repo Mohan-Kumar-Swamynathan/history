@@ -9,7 +9,14 @@ from typing import List
 
 from src.core.config_loader import load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_LONG_SCRIPT, max_tokens_for_stage, resolve_llm_mode, should_use_llm
+from src.core.llm_json_parser import extract_json_array
+from src.core.llm_policy import (
+    STAGE_LONG_SCRIPT,
+    max_tokens_for_stage,
+    preferred_provider_for_stage,
+    resolve_llm_mode,
+    should_use_llm,
+)
 from src.core.models import BeatType, NarrativeScript, ResearchBrief, StoryBeat, TopicCandidate, resolve_beat_type
 from src.script.channel_intro import append_outro_cta, prepend_greeting
 from src.script.offline_story_bank import BEAT_EMOTIONS, build_offline_long_script, resolve_long_beat_order
@@ -45,9 +52,9 @@ class NarrativeGenerator:
         feedback: List[str] | None = None,
     ) -> NarrativeScript:
         targets = load_topics_config().get("script_targets", {})
-        beat_count = int(targets.get("long_beat_count", 24))
-        min_words = int(targets.get("long_min_words", 1000))
-        max_words = int(targets.get("long_max_words", 2000))
+        beat_count = len(resolve_long_beat_order())
+        min_words = int(targets.get("long_min_words", 600))
+        max_words = int(targets.get("long_max_words", 900))
 
         feedback_text = ""
         if feedback:
@@ -69,23 +76,25 @@ Research: {research.story_facts[:5]}
 
 RULES:
 - Total {min_words}-{max_words} Tamil words across all beats
-- Exactly {beat_count} beats in this order (3 each): hook, context, conflict, escalation, turning_point, resolution, lesson, cta
-- Each beat 40-80 words — specific numbers, dialogue, places
+- Exactly {beat_count} beats in this order (repeat cycle): hook, context, conflict, escalation, turning_point, resolution, lesson, cta
+- Each beat 40-70 words — specific numbers, dialogue, places
 - 3rd person narration. No preaching. Story is the topic, lesson is the reward
 - Beat 1 must open with channel greeting: "வணக்கம்! துளிர் channel..."
 - Final beat must ask viewer to like, share, subscribe, and hit the bell
 - Beat 2 must contain open loop
 {feedback_text}
 
-Return JSON array of {beat_count} objects:
+Return JSON array of exactly {beat_count} objects:
 [{{"beat_type":"hook","narration_ta":"...","emotion":"exciting",
 "on_screen_text":"Age 10","visual_keywords":["street","newspaper"],
-"retention_hook":"question","open_loop":"..."}}]"""
+"retention_hook":"question","open_loop":"..."}}]
+
+Return ONLY the JSON array. No markdown fences."""
 
         raw = generate_text(
             prompt,
             max_tokens=max_tokens_for_stage(STAGE_LONG_SCRIPT, 8000),
-            preferred="gemini",
+            preferred=preferred_provider_for_stage(STAGE_LONG_SCRIPT),
         )
         beats = self._parse_beats(raw, topic)
         if beats:
@@ -98,10 +107,9 @@ Return JSON array of {beat_count} objects:
         return NarrativeScript(topic=topic, beats=beats, format="long")
 
     def _parse_beats(self, raw: str, topic: TopicCandidate) -> List[StoryBeat]:
-        match = re.search(r"\[.*\]", raw, re.DOTALL)
-        if not match:
+        beat_data = extract_json_array(raw)
+        if not beat_data:
             raise ValueError("No beat array in LLM response")
-        beat_data = json.loads(match.group())
         beats: List[StoryBeat] = []
         for index, item in enumerate(beat_data):
             beat_type = resolve_beat_type(

@@ -12,7 +12,14 @@ import yaml
 
 from src.core.config_loader import CONFIG_DIR, get_output_dir, load_topics_config
 from src.core.llm_client import generate_text, has_llm_credentials
-from src.core.llm_policy import STAGE_TOPIC, max_tokens_for_stage, should_use_llm, topic_candidate_count
+from src.core.llm_json_parser import extract_json_array
+from src.core.llm_policy import (
+    STAGE_TOPIC,
+    max_tokens_for_stage,
+    preferred_provider_for_stage,
+    should_use_llm,
+    topic_candidate_count,
+)
 from src.core.models import ContentBucket, StoryMode, TopicCandidate
 from src.topic.topic_deduplicator import TopicDeduplicator
 
@@ -81,10 +88,35 @@ Return JSON array of {count} objects:
         raw = generate_text(
             prompt,
             max_tokens=max_tokens_for_stage(STAGE_TOPIC, 1500),
-            preferred="gemini",
+            preferred=preferred_provider_for_stage(STAGE_TOPIC),
         )
-        candidates = _parse_candidate_array(raw)
-        return [self._normalize_candidate(item) for item in candidates if item]
+        candidates = [self._normalize_candidate(item) for item in extract_json_array(raw) if item]
+        if candidates:
+            return candidates
+
+        log.warning("Topic JSON parse failed — retrying with compact GitHub-friendly prompt")
+        compact_prompt = self._build_compact_topic_prompt(content_bucket, count, story_mode)
+        retry_provider = preferred_provider_for_stage(STAGE_TOPIC) or "github"
+        raw = generate_text(
+            compact_prompt,
+            max_tokens=1200,
+            preferred=retry_provider,
+        )
+        return [self._normalize_candidate(item) for item in extract_json_array(raw) if item]
+
+    def _build_compact_topic_prompt(
+        self,
+        content_bucket: ContentBucket,
+        count: int,
+        story_mode: StoryMode,
+    ) -> str:
+        bucket_label = content_bucket.value
+        return f"""Return ONLY valid JSON array. No markdown. No explanation.
+Generate {count} unique Tamil YouTube story topics for bucket={bucket_label}, mode={story_mode.value}.
+Avoid these used topics:
+{self.deduplicator.recent_avoid_list(10)}
+
+[{{"title_ta":"...","hook":"...","protagonist":"...","protagonist_age":"...","situation":"...","core_problem":"...","emotional_hook":"...","turning_point":"...","lesson":"...","hook_question":"...","open_loop":"...","story_mode":"{story_mode.value}","content_bucket":"{bucket_label}","wikipedia_subject":"","curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}]"""
 
     def score_and_select(self, candidates: List[TopicCandidate]) -> TopicCandidate:
         topics_config = load_topics_config()
@@ -223,10 +255,7 @@ def _dict_to_topic_candidate(data: dict, source: str) -> TopicCandidate:
 
 
 def _parse_candidate_array(raw: str) -> List[dict]:
-    match = re.search(r"\[.*\]", raw, re.DOTALL)
-    if not match:
-        return []
-    return json.loads(match.group())
+    return extract_json_array(raw)
 
 
 def _builtin_fallback_topics() -> List[TopicCandidate]:

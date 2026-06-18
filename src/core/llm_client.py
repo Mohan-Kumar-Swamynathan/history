@@ -1,4 +1,4 @@
-"""LLM client — Gemini primary, Groq secondary, GitHub Models fallback."""
+"""LLM client — planned provider chain with session health tracking."""
 
 from __future__ import annotations
 
@@ -10,11 +10,13 @@ import urllib.error
 import urllib.request
 from typing import Callable, List, Optional, Tuple
 
-log = logging.getLogger(__name__)
+from src.core.llm_registry import (
+    is_provider_available,
+    mark_provider_exhausted,
+    resolve_provider_order,
+)
 
-GEMINI_KEY = os.environ.get("GEMINI_KEY", "")
-GITHUB_TOKEN = os.environ.get("GITHUB_MODELS_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+log = logging.getLogger(__name__)
 
 GEMINI_MODEL = "gemini-2.0-flash"
 GITHUB_MODEL = "openai/gpt-4.1"
@@ -23,7 +25,12 @@ MAX_RETRIES = 2
 
 
 def has_llm_credentials() -> bool:
-    return bool(GEMINI_KEY or GITHUB_TOKEN or GROQ_API_KEY)
+    return bool(
+        os.environ.get("GEMINI_KEY")
+        or os.environ.get("GROQ_API_KEY")
+        or os.environ.get("GITHUB_MODELS_TOKEN")
+        or os.environ.get("GITHUB_TOKEN")
+    )
 
 
 def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 120) -> dict:
@@ -39,15 +46,16 @@ def _http_post_json(url: str, payload: dict, headers: dict, timeout: int = 120) 
 
 def _is_rate_or_auth_error(exc: Exception) -> bool:
     message = str(exc)
-    return any(code in message for code in ("429", "403", "401", "Too Many Requests", "Forbidden"))
+    return any(code in message for code in ("429", "403", "401", "Too Many Requests", "Forbidden", "1010"))
 
 
 def _call_gemini(prompt: str, max_tokens: int) -> str:
-    if not GEMINI_KEY:
+    gemini_key = os.environ.get("GEMINI_KEY", "")
+    if not gemini_key:
         raise RuntimeError("GEMINI_KEY not set")
     url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{GEMINI_MODEL}:generateContent?key={GEMINI_KEY}"
+        f"{GEMINI_MODEL}:generateContent?key={gemini_key}"
     )
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
@@ -58,7 +66,8 @@ def _call_gemini(prompt: str, max_tokens: int) -> str:
 
 
 def _call_github_models(prompt: str, max_tokens: int) -> str:
-    if not GITHUB_TOKEN:
+    github_token = os.environ.get("GITHUB_MODELS_TOKEN", "") or os.environ.get("GITHUB_TOKEN", "")
+    if not github_token:
         raise RuntimeError("GITHUB_TOKEN not set")
     url = "https://models.github.ai/inference/chat/completions"
     payload = {
@@ -70,7 +79,7 @@ def _call_github_models(prompt: str, max_tokens: int) -> str:
     headers = {
         "Content-Type": "application/json",
         "Accept": "application/vnd.github+json",
-        "Authorization": f"Bearer {GITHUB_TOKEN}",
+        "Authorization": f"Bearer {github_token}",
         "X-GitHub-Api-Version": "2022-11-28",
     }
     data = _http_post_json(url, payload, headers)
@@ -78,7 +87,8 @@ def _call_github_models(prompt: str, max_tokens: int) -> str:
 
 
 def _call_groq(prompt: str, max_tokens: int) -> str:
-    if not GROQ_API_KEY:
+    groq_key = os.environ.get("GROQ_API_KEY", "")
+    if not groq_key:
         raise RuntimeError("GROQ_API_KEY not set")
     url = "https://api.groq.com/openai/v1/chat/completions"
     payload = {
@@ -89,10 +99,17 @@ def _call_groq(prompt: str, max_tokens: int) -> str:
     }
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Authorization": f"Bearer {groq_key}",
     }
     data = _http_post_json(url, payload, headers)
     return data["choices"][0]["message"]["content"]
+
+
+_PROVIDER_CALLERS = {
+    "gemini": _call_gemini,
+    "groq": _call_groq,
+    "github": _call_github_models,
+}
 
 
 def _retry_provider(name: str, call_fn: Callable[[], str]) -> str:
@@ -105,7 +122,8 @@ def _retry_provider(name: str, call_fn: Callable[[], str]) -> str:
         except Exception as exc:
             last_error = exc
             if _is_rate_or_auth_error(exc):
-                log.warning("%s rate/auth error — skipping retries: %s", name, exc)
+                mark_provider_exhausted(name)
+                log.warning("%s unavailable (%s) — skipping for rest of run", name, exc)
                 raise RuntimeError(f"{name}: {exc}") from exc
             log.warning("%s attempt %d/%d: %s", name, attempt + 1, MAX_RETRIES, exc)
             if attempt < MAX_RETRIES - 1:
@@ -113,32 +131,22 @@ def _retry_provider(name: str, call_fn: Callable[[], str]) -> str:
     raise RuntimeError(f"{name} failed after {MAX_RETRIES} attempts: {last_error}")
 
 
-def _build_provider_chain(preferred: Optional[str] = None) -> List[Tuple[str, Callable[[str, int], str]]]:
-    providers: List[Tuple[str, Callable[[str, int], str]]] = []
-    if GEMINI_KEY:
-        providers.append(("gemini", _call_gemini))
-    if GROQ_API_KEY:
-        providers.append(("groq", _call_groq))
-    if GITHUB_TOKEN:
-        providers.append(("github", _call_github_models))
-
-    if preferred:
-        ordered = [provider for provider in providers if provider[0] == preferred]
-        ordered += [provider for provider in providers if provider[0] != preferred]
-        return ordered
-    return providers
-
-
 def generate_text(prompt: str, max_tokens: int = 4096, preferred: Optional[str] = None) -> str:
-    chain = _build_provider_chain(preferred)
-    if not chain:
-        raise RuntimeError("No LLM providers configured")
+    chain_names = resolve_provider_order(preferred)
+    if not chain_names:
+        raise RuntimeError("No LLM providers configured or all providers exhausted")
 
     errors: List[str] = []
-    for name, provider_fn in chain:
+    for name in chain_names:
+        if not is_provider_available(name):
+            continue
+        provider_fn = _PROVIDER_CALLERS.get(name)
+        if provider_fn is None:
+            continue
         try:
             return _retry_provider(name, lambda fn=provider_fn: fn(prompt, max_tokens))
         except Exception as exc:
             errors.append(f"{name}: {exc}")
-            log.warning("Provider %s exhausted, trying next...", name)
+            log.warning("Provider %s failed, trying next available...", name)
+
     raise RuntimeError("All LLM providers failed:\n" + "\n".join(errors))

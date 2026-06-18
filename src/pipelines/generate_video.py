@@ -13,6 +13,7 @@ from src.animation_engine.animation_engine import AnimationEngine
 from src.asset_engine.asset_engine import AssetEngine
 from src.core.config_loader import get_output_dir, load_emotions_config
 from src.core.free_guard import validate_free_only_mode
+from src.core.llm_policy import log_pipeline_llm_plan
 from src.core.models import BeatAudioSegment, BeatType, NarrativeScript, TopicCandidate, VideoPackage, WordTiming
 from src.research.research_collector import ResearchCollector
 from src.renderer.bgm_generator import generate_bgm
@@ -69,6 +70,7 @@ class VideoPipeline:
         run_dir.mkdir(parents=True, exist_ok=True)
 
         log.info("Run %s — format=%s starting pipeline", run_id, video_format)
+        log_pipeline_llm_plan()
 
         topic = self._resolve_topic(category, topic_override)
         research = self.research_collector.collect(topic)

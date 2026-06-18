@@ -38,6 +38,7 @@ env:
   GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
   PYTHONUNBUFFERED:      "1"
   LLM_MODE:              hybrid
+  LLM_CI_STRATEGY:       github_first
 
 jobs:
   morning_bundle:
