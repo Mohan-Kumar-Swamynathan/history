@@ -1,126 +1,128 @@
+# High-quality fallback topics — all biographical, all have Wikipedia
+# Used when LLM topic discovery fails
 topics:
   - title_ta: "1009 முறை நிராகரிக்கப்பட்ட Colonel Sanders-ன் கதை"
-    hook: "65 வயதில் அவர் எல்லாவற்றையும் இழந்தார்."
     protagonist: "Colonel Sanders"
     protagonist_age: "65"
-    situation: "Kentucky roadside restaurant"
-    core_problem: "1009 rejections before KFC"
-    emotional_hook: "Nobody believed because of his age"
-    turning_point: "The 1009th pitch succeeded"
-    lesson: "Failure is not the end"
-    hook_question: "65 வயதில் எல்லாம் முடிந்துவிட்டதா என்று நினைத்தவர் எப்படி பில்லியனர் ஆனார்?"
-    open_loop: "ஆனால் அடுத்து நடந்தது யாரும் எதிர்பார்க்கவில்லை..."
+    situation: "Kentucky, USA — roadside restaurant, 1952"
+    core_problem: "1009 restaurant owners rejected his fried chicken recipe"
+    emotional_hook: "65 வயதில் அவர் எல்லாவற்றையும் இழந்தார்"
+    turning_point: "1009th attempt succeeded — Pete Harman said yes"
+    lesson: "Age and failure don't define your future"
+    hook_question: "65 வயதில் 1009 முறை தோற்றவர் எப்படி billionaire ஆனார்?"
+    open_loop: "ஆனால் 1009வது முறை என்ன நடந்தது?"
     story_mode: biographical
     content_bucket: success_failure
     wikipedia_subject: "Colonel Sanders"
-    curiosity_score: 9.2
-    emotion_score: 8.8
+    curiosity_score: 9.5
+    emotion_score: 9.0
     story_score: 9.5
     lesson_score: 8.5
 
-  - title_ta: "APJ Abdul Kalam — சாதாரண விற்பனையாளனின் கனவு"
-    hook: "அவர் சாதாரண குடும்பத்தில் பிறந்தார். ஆனால் இந்தியாவின் தலைவரானார்."
-    protagonist: "APJ Abdul Kalam"
-    protagonist_age: "83"
-    situation: "Rameswaram, Tamil Nadu — newspaper boy"
-    core_problem: "வறுமையில் வளர்ந்தார் ஆனால் விஞ்ஞானத்தில் கனவு கண்டார்"
-    emotional_hook: "அவர் சொன்னார் — கனவுகள் எல்லாம் சாத்தியம்"
-    turning_point: "SLV-3 வெற்றி — இந்தியாவின் ஏவுகணை திட்டம்"
-    lesson: "எங்கிருந்து தொடங்கினாலும் முடியும்"
-    hook_question: "சாதாரண paper boy எப்படி Missile Man ஆனார்?"
-    open_loop: "ஆனால் அவரின் மிகப்பெரிய திருப்புமுனை யாரும் எதிர்பார்க்கவில்லை..."
-    story_mode: biographical
-    content_bucket: success_failure
-    wikipedia_subject: "A. P. J. Abdul Kalam"
-    curiosity_score: 9.0
-    emotion_score: 9.2
-    story_score: 9.0
-    lesson_score: 8.8
-
-  - title_ta: "Nokia ஏன் வீழ்ந்தது?"
-    hook: "2007ல் உலகின் #1 mobile company. 2013ல் விற்கப்பட்டது."
+  - title_ta: "Nokia ஏன் வீழ்ந்தது? ஒரு தவறான முடிவின் கதை"
     protagonist: "Nokia"
-    situation: "Finland, global leader 2007"
-    core_problem: "Smartphone revolution ignored"
-    emotional_hook: "One boardroom decision"
-    turning_point: "Stuck with Symbian after iPhone"
-    lesson: "Markets change — adapt or die"
-    hook_question: "உலகின் #1 company எப்படி 6 வருடங்களில் மறைந்தது?"
-    open_loop: "ஆனால் அந்த ஒரு meeting-ல் என்ன நடந்தது?"
+    protagonist_age: ""
+    situation: "Finland, 2007 — world's #1 mobile phone company"
+    core_problem: "Refused to adopt touchscreen and app ecosystem"
+    emotional_hook: "iPhone launch-ஐ Nokia 'expensive toy' என்று dismiss செய்தது"
+    turning_point: "2011 — Microsoft partnership, too late"
+    lesson: "Market leaders who stop adapting become cautionary tales"
+    hook_question: "உலகின் #1 phone company எப்படி 6 வருடங்களில் மறைந்தது?"
+    open_loop: "ஆனால் அந்த board meeting-ல் என்ன நடந்தது?"
     story_mode: biographical
     content_bucket: business
     wikipedia_subject: "Nokia"
     curiosity_score: 9.0
     emotion_score: 7.5
     story_score: 9.0
+    lesson_score: 9.0
+
+  - title_ta: "APJ Abdul Kalam — பத்திரிகை விற்ற சிறுவன் இந்தியாவின் missile man ஆன கதை"
+    protagonist: "APJ Abdul Kalam"
+    protagonist_age: "10"
+    situation: "Rameswaram, Tamil Nadu, 1941 — poor fisherman family"
+    core_problem: "World War II stopped newspapers; had to find alternative income"
+    emotional_hook: "அப்பா சொன்னார் — படி, இல்லையென்றால் வாழ்க்கை கஷ்டமாகும்"
+    turning_point: "Teacher Iyadurai Solomon showed him a fighter jet drawing"
+    lesson: "Curiosity and discipline can overcome any background"
+    hook_question: "பத்திரிகை விற்ற சிறுவன் எப்படி India-வின் missile man ஆனார்?"
+    open_loop: "ஆனால் அந்த ஒரு drawing அவரின் வாழ்க்கையை எப்படி மாற்றியது?"
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "A. P. J. Abdul Kalam"
+    curiosity_score: 9.2
+    emotion_score: 9.0
+    story_score: 9.0
     lesson_score: 8.5
 
-  - title_ta: "₹28,000 சம்பளத்தில் அப்பாவை நம்பிக்கை வைக்க முடியாத அர்ஜுன்"
-    hook: "உன் சம்பளம் பற்றி யாராவது கேட்கும்போது நீ என்ன சொல்வாய்?"
-    protagonist: "அர்ஜுன்"
-    protagonist_age: "24"
-    situation: "Coimbatore IT, ₹28,000"
-    core_problem: "Father's expectations vs reality"
-    emotional_hook: "அப்பா கேட்டார் — மகனே உன்னால் சம்பாரிக்க முடியாதா?"
-    turning_point: "One mistake became a lesson"
-    lesson: "Your worth is not your salary"
-    hook_question: "உன் சம்பளம் பற்றி யாராவது கேட்கும்போது நீ என்ன சொல்வாய்?"
-    story_mode: composite
-    content_bucket: psychology
-    curiosity_score: 8.5
-    emotion_score: 8.7
-    story_score: 8.2
-    lesson_score: 8.0
-
-  - title_ta: "Steve Jobs — துறக்கப்பட்டவரின் திரும்ப வருகை"
-    hook: "1985ல் அவர் சொந்த நிறுவனத்திலிருந்து வெளியேற்றப்பட்டார்."
-    protagonist: "Steve Jobs"
-    protagonist_age: "30"
-    situation: "Apple, Silicon Valley 1985"
-    core_problem: "Boardroom power struggle — fired from Apple"
-    emotional_hook: "அவர் சொன்னார் — இது என் வாழ்க்கையின் சிறந்த நாள்"
-    turning_point: "NeXT and Pixar rebuilt him — returned to save Apple"
-    lesson: "Setback can become setup for comeback"
-    hook_question: "சொந்த company-யிலிருந்து வெளியேற்றப்பட்டவர் எப்படி மீண்டும் வந்தார்?"
-    open_loop: "ஆனால் அவர் திரும்பி வந்தபோது என்ன செய்தார் தெரியுமா?"
+  - title_ta: "Indra Nooyi — Chennai-யிலிருந்து PepsiCo CEO வரை"
+    protagonist: "Indra Nooyi"
+    protagonist_age: "22"
+    situation: "Chennai, Tamil Nadu → Yale University → PepsiCo boardroom"
+    core_problem: "Indian woman in 1970s corporate America — every door was closed"
+    emotional_hook: "Yale interview-க்கு sari-ல் போனாள் — இன்று அதே sari-ஐ museum-ல் வைத்திருக்கிறார்கள்"
+    turning_point: "1994 — convinced PepsiCo to buy Tropicana against board's wish"
+    lesson: "Staying true to your identity is your strength, not your weakness"
+    hook_question: "சென்னை பெண் எப்படி America-வின் மிகப்பெரிய company-ஐ நடத்தினாள்?"
+    open_loop: "ஆனால் அவள் CEO ஆன அன்று அம்மாவிடம் என்ன சொன்னாள்?"
     story_mode: biographical
     content_bucket: business
-    wikipedia_subject: "Steve Jobs"
-    curiosity_score: 9.1
-    emotion_score: 8.6
-    story_score: 9.2
-    lesson_score: 8.4
-
-  - title_ta: "₹500 துணிக்கடையில் தொடங்கிய திருப்தி"
-    hook: "அவள் வெறும் ₹500 மூலதனத்துடன் தொடங்கினாள்."
-    protagonist: "திருப்தி"
-    protagonist_age: "32"
-    situation: "Madurai small textile shop"
-    core_problem: "No capital, no connections, only skill"
-    emotional_hook: "அவள் சொன்னார் — நான் விற்பனை செய்வது துணி அல்ல, நம்பிக்கை"
-    turning_point: "One loyal customer chain changed everything"
-    lesson: "Small start can build big trust"
-    hook_question: "₹500ல் தொடங்கியவள் எப்படி பெரிய brand ஆனாள்?"
-    story_mode: composite
-    content_bucket: business
-    curiosity_score: 8.8
-    emotion_score: 8.9
-    story_score: 8.6
-    lesson_score: 8.3
-
-  - title_ta: "ஜல்லிக்கட்டு தடைக்கு எதிராகப் போராடிய மாறன்"
-    hook: "பாரம்பரியம் vs நவீன சட்டம் — ஒரு கிராமத்தின் கதை."
-    protagonist: "மாறன்"
-    protagonist_age: "45"
-    situation: "Alanganallur village, Tamil Nadu"
-    core_problem: "Tradition threatened by legal ban"
-    emotional_hook: "அவர் சொன்னார் — இது வெறும் விளையாட்டு அல்ல, அடையாளம்"
-    turning_point: "Peaceful protest united the village"
-    lesson: "Culture survives when community stands together"
-    hook_question: "ஒரு கிராமம் எப்படி தன் பாரம்பரியத்தை காப்பாற்றியது?"
-    story_mode: composite
-    content_bucket: historical_story
-    curiosity_score: 8.7
-    emotion_score: 9.0
+    wikipedia_subject: "Indra Nooyi"
+    curiosity_score: 9.0
+    emotion_score: 8.8
     story_score: 8.8
-    lesson_score: 8.2
+    lesson_score: 8.5
+
+  - title_ta: "Dhirubhai Ambani — ₹500 சம்பளத்திலிருந்து Asia-வின் பணக்காரன்"
+    protagonist: "Dhirubhai Ambani"
+    protagonist_age: "16"
+    situation: "Chorwad, Gujarat, 1950 — poor family, no education"
+    core_problem: "Left school at 16, went to Yemen as a petrol station attendant"
+    emotional_hook: "Yemen-ல் petrol station-ல் வேலை செய்தார். சம்பளம் ₹300"
+    turning_point: "Noticed nylon yarn shortage in India — borrowed money, started textile trade"
+    lesson: "Ambition without resources still beats resources without ambition"
+    hook_question: "₹300 சம்பளக்காரன் எப்படி India-வின் மிக பணக்கார குடும்பம் ஆனார்?"
+    open_loop: "ஆனால் ₹500-ல் தொடங்கிய business எப்படி ₹1 lakh crore ஆனது?"
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "Dhirubhai Ambani"
+    curiosity_score: 9.3
+    emotion_score: 8.5
+    story_score: 9.2
+    lesson_score: 8.0
+
+  - title_ta: "Sundar Pichai — Madurai-ல் தொடங்கி Google CEO வரை"
+    protagonist: "Sundar Pichai"
+    protagonist_age: "12"
+    situation: "Chennai, Tamil Nadu, 1984 — family got first telephone"
+    core_problem: "IIT Kharagpur graduate with no money for Stanford fees"
+    emotional_hook: "Stanford-க்கு பயணிக்க பணமில்லை — scholarship மட்டும் நம்பிக்கை"
+    turning_point: "2004 — joined Google, pitched Google Toolbar, convinced Larry Page"
+    lesson: "Preparation + opportunity = luck that others call talent"
+    hook_question: "Madurai-ல் வளர்ந்தவர் எப்படி Google CEO ஆனார்?"
+    open_loop: "ஆனால் Larry Page-ஐ convince செய்த அந்த meeting எப்படி நடந்தது?"
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "Sundar Pichai"
+    curiosity_score: 9.0
+    emotion_score: 8.5
+    story_score: 8.8
+    lesson_score: 8.5
+
+  - title_ta: "Ratan Tata — எல்லோரும் சிரித்த Nano car-ன் கதை"
+    protagonist: "Ratan Tata"
+    protagonist_age: "67"
+    situation: "Mumbai, 2003 — saw family of 4 on scooter in rain"
+    core_problem: "Promised ₹1 lakh car — engineers said impossible"
+    emotional_hook: "Paris Motor Show-ல் world மகிழ்ந்தது. India-ல் political protest நடந்தது"
+    turning_point: "2008 Singur factory eviction — moved entire plant to Sanand in 28 days"
+    lesson: "A dream built for others always finds a way"
+    hook_question: "₹1 lakh car சாத்தியமா என்று உலகம் கேட்டபோது Ratan Tata என்ன செய்தார்?"
+    open_loop: "ஆனால் Nano launch-க்கு ஒரு வாரம் முன்பு என்ன நடந்தது?"
+    story_mode: biographical
+    content_bucket: business
+    wikipedia_subject: "Tata Nano"
+    curiosity_score: 9.0
+    emotion_score: 8.8
+    story_score: 9.0
+    lesson_score: 8.0
