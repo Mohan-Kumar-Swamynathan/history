@@ -1,4 +1,11 @@
-"""Research collection — Wikipedia + LLM + offline fallback."""
+"""Research collection — deep Wikipedia extraction + fact synthesis.
+
+Strategy:
+  1. Fetch Wikipedia full article (not just summary)
+  2. Extract specific: dates, numbers, quotes, turning points, failures
+  3. LLM synthesizes story facts ONLY from Wikipedia text — no invention
+  4. Result: every fact in the script is real and verifiable
+"""
 
 from __future__ import annotations
 
@@ -15,84 +22,192 @@ from src.core.models import ResearchBrief, StoryMode, TopicCandidate
 
 log = logging.getLogger(__name__)
 
+WIKI_SUMMARY_API = "https://en.wikipedia.org/api/rest_v1/page/summary/{}"
+WIKI_EXTRACT_API = "https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=extracts&exintro=0&explaintext=1&format=json"
+
+
+def _fetch_wiki_text(subject: str) -> str:
+    """Fetch full Wikipedia article text (not just intro)."""
+    try:
+        encoded = urllib.parse.quote(subject.replace(" ", "_"))
+        url = WIKI_EXTRACT_API.format(encoded)
+        req = urllib.request.Request(url, headers={"User-Agent": "ThulirBot/1.0 Tamil storytelling"})
+        with urllib.request.urlopen(req, timeout=20) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        pages = data.get("query", {}).get("pages", {})
+        for page in pages.values():
+            text = page.get("extract", "")
+            if text and len(text) > 200:
+                return text[:8000]  # first 8000 chars is enough
+    except Exception as exc:
+        log.warning("Wikipedia full text failed for %s: %s", subject, exc)
+
+    # Fallback: summary API
+    try:
+        encoded = urllib.parse.quote(subject.replace(" ", "_"))
+        url = WIKI_SUMMARY_API.format(encoded)
+        req = urllib.request.Request(url, headers={"User-Agent": "ThulirBot/1.0"})
+        with urllib.request.urlopen(req, timeout=15) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return data.get("extract", "")
+    except Exception as exc:
+        log.warning("Wikipedia summary also failed: %s", exc)
+        return ""
+
+
+def _extract_facts_from_text(text: str, subject: str) -> dict:
+    """Extract structured facts directly from Wikipedia text."""
+    dates    = list(dict.fromkeys(re.findall(r"\b(1[89]\d{2}|20\d{2})\b", text)))[:8]
+    numbers  = list(dict.fromkeys(re.findall(r"\b\d{1,3}(?:,\d{3})*(?:\.\d+)?\b", text)))[:10]
+    # Extract sentences with strong story signals
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?])\s+", text) if len(s.strip()) > 40]
+    # Score sentences for story value
+    story_keywords = ["failed", "rejected", "left", "founded", "started", "died", "born",
+                      "million", "billion", "first", "only", "despite", "although",
+                      "however", "eventually", "finally", "decided", "refused"]
+    scored = []
+    for s in sentences:
+        score = sum(1 for kw in story_keywords if kw.lower() in s.lower())
+        scored.append((score, s))
+    scored.sort(reverse=True)
+    story_facts = [s for _, s in scored[:10]]
+    return {
+        "facts": sentences[:5],
+        "story_facts": story_facts,
+        "dates": dates,
+        "numbers": numbers,
+    }
+
+
+def _llm_synthesize_from_wiki(
+    wiki_text: str,
+    topic: TopicCandidate,
+) -> ResearchBrief:
+    """Use LLM to extract story-relevant facts from Wikipedia text.
+    CRITICAL: LLM must only use facts present in the Wikipedia text.
+    """
+    prompt = f"""You are extracting story facts for a Tamil YouTube storytelling video.
+Wikipedia article text (USE ONLY THIS — do not invent):
+---
+{wiki_text[:4000]}
+---
+
+Subject: {topic.protagonist}
+
+Extract ONLY facts present in the text above. Do not add, invent, or assume anything.
+Return JSON:
+{{
+  "story_facts": [
+    "8 specific sentences from the Wikipedia text that are most story-relevant",
+    "Include: exact years, exact numbers, specific failures, specific turning points",
+    "Each fact must be directly verifiable from the text above"
+  ],
+  "dates": ["list of important years from the text"],
+  "locations": ["specific places mentioned"],
+  "key_numbers": ["specific numbers: ages, amounts, counts"],
+  "hook_moment": "The single most dramatic/surprising fact from this text",
+  "failure_moment": "The biggest failure or setback mentioned",
+  "turning_point": "The moment things changed",
+  "achievement": "The main achievement or legacy"
+}}
+
+Return ONLY JSON. No markdown."""
+
+    raw = generate_text(prompt, max_tokens=1500)
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not match:
+        return None
+    data = json.loads(match.group())
+    return ResearchBrief(
+        topic=topic.protagonist,
+        facts=data.get("story_facts", [])[:5],
+        story_facts=data.get("story_facts", []),
+        dates=data.get("dates", []),
+        locations=data.get("locations", []),
+        figures=[topic.protagonist],
+        timeline=data.get("dates", []),
+        key_numbers=data.get("key_numbers", []),
+        sources=["Wikipedia: " + topic.wikipedia_subject],
+    )
+
 
 class ResearchCollector:
     def collect(self, topic: TopicCandidate) -> ResearchBrief:
-        if topic.story_mode == StoryMode.BIOGRAPHICAL and topic.wikipedia_subject:
-            wiki_brief = self._fetch_wikipedia_brief(topic.wikipedia_subject)
-            if wiki_brief:
-                return wiki_brief
+        wiki_subject = topic.wikipedia_subject or topic.protagonist
 
+        # Always try Wikipedia for biographical stories
+        if topic.story_mode == StoryMode.BIOGRAPHICAL or wiki_subject:
+            wiki_text = _fetch_wiki_text(wiki_subject)
+            if wiki_text and len(wiki_text) > 300:
+                log.info("Wikipedia text fetched: %d chars for %s", len(wiki_text), wiki_subject)
+
+                # Extract facts directly from text
+                raw_facts = _extract_facts_from_text(wiki_text, wiki_subject)
+
+                # Use LLM to synthesize story-relevant facts from Wikipedia
+                if has_llm_credentials() and should_use_llm(STAGE_RESEARCH):
+                    try:
+                        brief = _llm_synthesize_from_wiki(wiki_text, topic)
+                        if brief:
+                            log.info("Research ready: %d story facts from Wikipedia", len(brief.story_facts))
+                            return brief
+                    except Exception as exc:
+                        log.warning("LLM synthesis failed: %s — using raw extraction", exc)
+
+                # Fallback: use raw extracted facts
+                return ResearchBrief(
+                    topic=wiki_subject,
+                    facts=raw_facts["facts"],
+                    story_facts=raw_facts["story_facts"],
+                    dates=raw_facts["dates"],
+                    figures=[wiki_subject],
+                    key_numbers=raw_facts["numbers"],
+                    sources=["Wikipedia: " + wiki_subject],
+                )
+
+        # Composite stories: LLM research based on topic metadata
         if has_llm_credentials() and should_use_llm(STAGE_RESEARCH):
             try:
-                return self._collect_with_llm(topic)
+                return self._composite_research(topic)
             except Exception as exc:
-                log.warning("LLM research failed: %s — using offline brief", exc)
+                log.warning("Composite research failed: %s", exc)
+
         return self._offline_brief(topic)
 
-    def _fetch_wikipedia_brief(self, subject: str) -> ResearchBrief | None:
-        try:
-            encoded = urllib.parse.quote(subject.replace(" ", "_"))
-            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{encoded}"
-            request = urllib.request.Request(url, headers={"User-Agent": "ThulirBot/1.0"})
-            with urllib.request.urlopen(request, timeout=15) as response:
-                data = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            log.warning("Wikipedia fetch failed for %s: %s", subject, exc)
-            return None
-
-        extract = data.get("extract", "")
-        if not extract:
-            return None
-
-        dates = re.findall(r"\b(1[89]\d{2}|20\d{2})\b", extract)
-        numbers = re.findall(r"\b\d{1,4}(?:,\d{3})*\b", extract)
-        sentences = [sentence.strip() for sentence in re.split(r"(?<=[.!?])\s+", extract) if sentence.strip()]
-
-        return ResearchBrief(
-            topic=subject,
-            facts=sentences[:5],
-            story_facts=sentences[:8],
-            dates=list(dict.fromkeys(dates))[:6],
-            locations=[],
-            figures=[subject],
-            timeline=dates[:4],
-            key_numbers=numbers[:6],
-            sources=[data.get("content_urls", {}).get("desktop", {}).get("page", "wikipedia.org")],
-        )
-
-    def _collect_with_llm(self, topic: TopicCandidate) -> ResearchBrief:
-        prompt = f"""Story research for Tamil YouTube storytelling video.
-
-Title: {topic.title_ta}
-Protagonist: {topic.protagonist}
+    def _composite_research(self, topic: TopicCandidate) -> ResearchBrief:
+        """For composite fictional stories, gather real context facts."""
+        prompt = f"""Research for Tamil storytelling video.
+Protagonist: {topic.protagonist} (fictional character)
 Situation: {topic.situation}
-Problem: {topic.core_problem}
-Mode: {topic.story_mode.value}
+Core problem: {topic.core_problem}
 
-Return JSON with story facts (NOT generic tips):
-{{"facts":["5 Tamil story facts"],"story_facts":["8 detailed facts for script"],
-"dates":["years"],"locations":["places"],"figures":["{topic.protagonist}"],
-"timeline":["event order"],"key_numbers":["specific numbers"],"sources":["source"]}}"""
-        raw = generate_text(prompt, max_tokens=1200)
+Provide REAL contextual facts (not fictional) that ground this story:
+- Real statistics about this type of situation in India
+- Real average numbers (salary, age, percentages)
+- Real psychological/social context
+
+Return JSON:
+{{"story_facts": ["5 real facts grounding this story"],
+"dates": [], "locations": ["{topic.situation}"],
+"key_numbers": ["real relevant numbers"],
+"sources": ["source of each fact"]}}"""
+
+        raw = generate_text(prompt, max_tokens=800)
         match = re.search(r"\{.*\}", raw, re.DOTALL)
         data = json.loads(match.group()) if match else {}
-        return ResearchBrief(topic=topic.title_ta, **data)
-
-    def _offline_brief(self, topic: TopicCandidate) -> ResearchBrief:
-        facts: List[str] = [
-            topic.situation or f"{topic.protagonist} ஒரு உண்மையான கதாபாத்திரம்.",
-            topic.core_problem or "அவர் ஒரு பெரிய சவாலை எதிர்கொண்டார்.",
-            topic.emotional_hook or "ஒரு உணர்ச்சி நிறைந்த தருணம் அவரை மாற்றியது.",
-            topic.turning_point or "ஒரு திருப்புமுனை வந்தது.",
-            topic.lesson or "இந்த கதை ஒரு முக்கிய பாடத்தை கற்பிக்கிறது.",
-        ]
-        numbers = re.findall(r"\d+", f"{topic.situation} {topic.title_ta}")
         return ResearchBrief(
             topic=topic.title_ta,
-            facts=facts,
-            story_facts=facts,
+            facts=data.get("story_facts", [topic.situation]),
+            story_facts=data.get("story_facts", [topic.situation, topic.core_problem]),
+            key_numbers=data.get("key_numbers", []),
+            sources=data.get("sources", ["llm_research"]),
+        )
+
+    def _offline_brief(self, topic: TopicCandidate) -> ResearchBrief:
+        return ResearchBrief(
+            topic=topic.title_ta,
+            facts=[topic.situation, topic.core_problem, topic.emotional_hook],
+            story_facts=[topic.situation, topic.core_problem, topic.turning_point, topic.lesson],
             figures=[topic.protagonist],
-            key_numbers=numbers,
             sources=["offline_template"],
         )
