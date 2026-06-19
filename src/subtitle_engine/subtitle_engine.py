@@ -68,13 +68,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         word_timings: List[WordTiming] | None = None,
         fps: int = 24,
     ) -> Path:
-        if self._ffmpeg_has_subtitles_filter():
-            burned = self._burn_with_ffmpeg_subtitles(video_path, ass_path, output_path)
-            if burned:
-                return output_path
-        if word_timings:
-            return self._burn_with_pil_overlay(video_path, word_timings, output_path, fps)
+        """Burn subtitles via FFmpeg subtitles filter (fast, single-pass).
+        PIL frame-by-frame fallback removed — it caused 30-40 min timeouts on CI.
+        If FFmpeg subtitles filter unavailable, copy video as-is (subtitles in .srt only).
+        """
         import shutil
+        burned = self._burn_with_ffmpeg_subtitles(video_path, ass_path, output_path)
+        if burned:
+            return output_path
+        log.warning("FFmpeg subtitles filter unavailable — copying video without burn-in (SRT still saved)")
         shutil.copy(video_path, output_path)
         return output_path
 
