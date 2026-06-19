@@ -48,6 +48,7 @@ env:
   YOUTUBE_TOKEN_BASE64:  ${{ secrets.YOUTUBE_TOKEN_BASE64 }}
   GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
   GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
+  PEXELS_API_KEY:        ${{ secrets.PEXELS_API_KEY }}
   PYTHONUNBUFFERED:      "1"
   LLM_MODE:              hybrid
   LLM_CI_STRATEGY:       github_first
