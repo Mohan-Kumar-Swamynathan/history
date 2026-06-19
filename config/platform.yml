@@ -1,4 +1,4 @@
-free_only: true
+free_only: false
 language: ta
 voice: ta-IN-ValluvarNeural
 subtitle_language: ta
