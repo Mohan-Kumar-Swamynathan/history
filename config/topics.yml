@@ -26,17 +26,35 @@ blocklist_patterns:
   - "generic motivation"
 
 script_targets:
-  long_min_words: 600
-  long_max_words: 900
-  long_target_words: 750
-  long_beat_count: 12
-  long_min_words_per_beat: 25
+  long_beat_count: 6
+  long_min_words: 360
+  long_max_words: 450
+  long_target_words: 400
+  long_min_words_per_beat: 50
+  long_max_words_per_beat: 75
   long_target_minutes: 5
   shorts_min_words: 80
   shorts_max_words: 150
   shorts_beat_count: 5
-  shorts_min_duration_seconds: 30
-  shorts_max_duration_seconds: 60
+
+# High-quality story seeds — real people, strong hooks
+# LLM uses these as reference quality bar
+story_seeds:
+  - protagonist: "Colonel Sanders"
+    hook: "1009 முறை நிராகரிக்கப்பட்டார். 65 வயதில் KFC தொடங்கினார்."
+    bucket: success_failure
+  - protagonist: "Nokia"
+    hook: "உலகின் #1 phone company. ஒரு தவறான முடிவில் அழிந்தது."
+    bucket: business
+  - protagonist: "APJ Abdul Kalam"
+    hook: "பத்திரிகை விற்ற சிறுவன். இந்தியாவின் missile man ஆனார்."
+    bucket: success_failure
+  - protagonist: "Indra Nooyi"
+    hook: "Tamil family. Yale MBA. Pepsi CEO — 12 ஆண்டுகள்."
+    bucket: business
+  - protagonist: "Dhirubhai Ambani"
+    hook: "₹500 சம்பளம். Asia-வின் பணக்காரன் ஆனார்."
+    bucket: success_failure
 
 categories:
   - storytelling
