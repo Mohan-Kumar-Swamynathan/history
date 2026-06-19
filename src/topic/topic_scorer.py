@@ -71,6 +71,15 @@ class TopicScorer:
         story_mode = self._story_mode_for_bucket(content_bucket)
         prompt = f"""You are a YouTube Content Strategist for "துளிர்" (Thulir) — Tamil storytelling channel like Almost Everything.
 
+QUALITY BAR: Your topics must be as strong as these examples:
+- Colonel Sanders: 1009 rejections at age 65, then built KFC
+- Nokia: #1 phone brand → destroyed by one wrong decision
+- APJ Kalam: newspaper boy → India's missile man
+- Indra Nooyi: Tamil girl → PepsiCo CEO for 12 years
+- Dhirubhai Ambani: ₹500 salary → Asia's richest man
+
+Each topic needs: a SPECIFIC number, a SPECIFIC failure, a SPECIFIC turning point.
+
 Content bucket: {bucket_label}
 Story mode: {story_mode.value}
 Generate exactly {count} UNIQUE story topic candidates.
@@ -78,7 +87,9 @@ Generate exactly {count} UNIQUE story topic candidates.
 Rules:
 - Real STORIES not tips, not generic motivation, not Wikipedia summaries
 - Each must have conflict, struggle, turning point, lesson as reward
-- Biographical mode: real named person (Kalam, Sanders, Jobs, Murthy, Nokia story, etc.)
+- Biographical mode (PREFERRED — 70% of topics): real named person with Wikipedia presence
+  Examples: Kalam, Sanders, Nokia, Infosys, Indra Nooyi, Ratan Tata, Dhirubhai, Sundar Pichai
+- Composite mode (30%): fictional Tamil name in VERY specific real situation with exact numbers
 - Composite mode: fictional Tamil name in real situation (salary, rejection, anxiety)
 - Reject generic titles like "work hard" or "success secrets"
 
