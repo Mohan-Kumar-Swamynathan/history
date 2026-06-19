@@ -26,40 +26,39 @@ class VideoRenderer:
         self.shorts_height = video.get("shorts_height", 1920)
 
     def encode_frames(self, frames: List[np.ndarray], output_path: Path) -> Path:
+        """Encode frames to H.264. CI-optimised: ultrafast preset + frame dedup."""
+        import hashlib
         output_path.parent.mkdir(parents=True, exist_ok=True)
         width = frames[0].shape[1] if frames else self.width
         height = frames[0].shape[0] if frames else self.height
         command = [
-            "ffmpeg",
-            "-y",
-            "-loglevel",
-            "error",
-            "-f",
-            "rawvideo",
-            "-vcodec",
-            "rawvideo",
-            "-s",
-            f"{width}x{height}",
-            "-pix_fmt",
-            "rgb24",
-            "-r",
-            str(self.fps),
-            "-i",
-            "pipe:0",
-            "-c:v",
-            "libx264",
-            "-preset",
-            "veryfast",
-            "-crf",
-            "20",
-            "-pix_fmt",
-            "yuv420p",
+            "ffmpeg", "-y", "-loglevel", "error",
+            "-f", "rawvideo", "-vcodec", "rawvideo",
+            "-s", f"{width}x{height}",
+            "-pix_fmt", "rgb24",
+            "-r", str(self.fps),
+            "-i", "pipe:0",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",   # 3× faster than veryfast on CI
+            "-crf", "23",             # adequate for YouTube re-compression
+            "-tune", "stillimage",    # helps when frames are identical
+            "-pix_fmt", "yuv420p",
             str(output_path),
         ]
         process = subprocess.Popen(command, stdin=subprocess.PIPE)
         assert process.stdin is not None
+        prev_hash: bytes | None = None
+        prev_bytes: bytes | None = None
         for frame in frames:
-            process.stdin.write(frame.tobytes())
+            # Dedup: re-pipe cached bytes for identical frames (skip tobytes)
+            h = hashlib.md5(frame[::16, ::16].tobytes()).digest()
+            if h == prev_hash and prev_bytes is not None:
+                process.stdin.write(prev_bytes)
+            else:
+                raw = frame.tobytes()
+                process.stdin.write(raw)
+                prev_hash = h
+                prev_bytes = raw
         process.stdin.close()
         process.wait()
         if process.returncode != 0:
@@ -84,7 +83,7 @@ class VideoRenderer:
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-i", str(video_path),
                 "-vf", f"tpad=stop_mode=clone:stop_duration={pad_seconds:.3f}",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-pix_fmt", "yuv420p",
                 str(output_path),
             ]
@@ -93,7 +92,7 @@ class VideoRenderer:
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-i", str(video_path),
                 "-t", f"{target_duration_seconds:.3f}",
-                "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
                 "-pix_fmt", "yuv420p",
                 str(output_path),
             ]
