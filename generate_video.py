@@ -12,7 +12,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.pipelines.generate_video import VideoPipeline  # noqa: E402
+from src.pipelines.generate_video_v3 import VideoPipelineV3 as VideoPipeline  # noqa: E402
 
 
 def build_argument_parser() -> argparse.ArgumentParser:
