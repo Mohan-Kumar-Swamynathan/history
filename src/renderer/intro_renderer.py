@@ -45,6 +45,35 @@ def _font(sc, sz):
         if k not in _FC: _FC[k] = ImageFont.load_default()
     return _FC[k]
 
+def _segs(text):
+    """Split text into (segment, script) for per-character font switching."""
+    out, cur, ct = [], "", None
+    for ch in text:
+        t = "ta" if (0x0B80 <= ord(ch) <= 0x0BFF) else "en"
+        if t != ct and cur:
+            out.append((cur, ct)); cur = ""
+        cur += ch; ct = t
+    if cur: out.append((cur, ct))
+    return out
+
+def _draw_mixed(draw, text, x, y, sz, col, shadow_col=None):
+    """Draw mixed Tamil+English text with correct font per segment — no boxes."""
+    cx = x
+    for seg, sc in _segs(text):
+        f = _font(sc, sz)
+        if shadow_col:
+            draw.text((cx+2, y+2), seg, font=f, fill=shadow_col)
+        draw.text((cx, y), seg, font=f, fill=col)
+        cx += draw.textbbox((0,0), seg, font=f)[2]
+    return cx
+
+def _measure_mixed(draw, text, sz):
+    """Measure width of mixed Tamil+English text."""
+    w = 0
+    for seg, sc in _segs(text):
+        w += draw.textbbox((0,0), seg, font=_font(sc, sz))[2]
+    return w
+
 def _ab(fg, bg, a): return tuple(int(bg[i]+(fg[i]-bg[i])*a) for i in range(3))
 def _eo(t): return 1-(1-t)**3
 def _eio(t): return t*t*(3-2*t)
@@ -136,25 +165,20 @@ def _draw_intro(name_ta, tagline_ta, handle, topic_ta, alpha, slide):
     # ── Channel name "துளிர்" ─────────────────────────────────────
     name_sz = 200
     nf = _font("ta", name_sz)
-    nb = draw.textbbox((0,0), name_ta, font=nf)
-    nw = nb[2]-nb[0]
+    nw = _measure_mixed(draw, name_ta, name_sz)
+    nb = [0, 0, nw, name_sz+10]  # approximate
     nx = 420
     ny = H//2 - 190 + slide
     # Shadow
     shadow = _ab(DARK, CREAM, alpha*0.25)
-    draw.text((nx+5, ny+5), name_ta, font=nf, fill=shadow)
-    # Main
-    col = _ab(DARK, CREAM, alpha)
-    draw.text((nx, ny), name_ta, font=nf, fill=col)
+    _draw_mixed(draw, name_ta, nx, ny, name_sz, _ab(DARK, CREAM, alpha), shadow_col=_ab(DARK, CREAM, alpha*0.2))
 
     # ── Tagline ───────────────────────────────────────────────────
     tag_sz = 54
     tf = _font("ta", tag_sz)
-    tb = draw.textbbox((0,0), tagline_ta, font=tf)
-    tw = tb[2]-tb[0]
+    tw = _measure_mixed(draw, tagline_ta, tag_sz)
     ty = ny + (nb[3]-nb[1]) + 28 + slide
-    col_tag = _ab(MID, CREAM, alpha)
-    draw.text((nx, ty), tagline_ta, font=tf, fill=col_tag)
+    _draw_mixed(draw, tagline_ta, nx, ty, tag_sz, _ab(MID, CREAM, alpha))
 
     # ── Topic teaser ──────────────────────────────────────────────
     if topic_ta:
@@ -162,8 +186,7 @@ def _draw_intro(name_ta, tagline_ta, handle, topic_ta, alpha, slide):
         tease_f = _font("ta", tease_sz)
         tease = f"இன்றைய கதை: {topic_ta[:38]}"
         t2y = ty + (tb[3]-tb[1]) + 30 + slide
-        col_t = _ab(INK, CREAM, alpha*0.75)
-        draw.text((nx, t2y), tease, font=tease_f, fill=col_t)
+        _draw_mixed(draw, tease, nx, t2y, tease_sz, _ab(INK, CREAM, alpha*0.75))
 
     # ── Bottom strip (dark green like banner left) ────────────────
     strip_y = H - 88
