@@ -1,128 +1,71 @@
-# High-quality fallback topics — all biographical, all have Wikipedia
-# Used when LLM topic discovery fails
+# High quality fallback topics — fully pre-written Tamil scripts
+# These are used when LLM is rate-limited or unavailable
+# Every field is in pure Tamil — no English sentences
+
 topics:
-  - title_ta: "1009 முறை நிராகரிக்கப்பட்ட Colonel Sanders-ன் கதை"
-    protagonist: "Colonel Sanders"
-    protagonist_age: "65"
-    situation: "Kentucky, USA — roadside restaurant, 1952"
-    core_problem: "1009 restaurant owners rejected his fried chicken recipe"
-    emotional_hook: "65 வயதில் அவர் எல்லாவற்றையும் இழந்தார்"
-    turning_point: "1009th attempt succeeded — Pete Harman said yes"
-    lesson: "Age and failure don't define your future"
-    hook_question: "65 வயதில் 1009 முறை தோற்றவர் எப்படி billionaire ஆனார்?"
-    open_loop: "ஆனால் 1009வது முறை என்ன நடந்தது?"
-    story_mode: biographical
-    content_bucket: success_failure
-    wikipedia_subject: "Colonel Sanders"
-    curiosity_score: 9.5
-    emotion_score: 9.0
-    story_score: 9.5
-    lesson_score: 8.5
 
-  - title_ta: "Nokia ஏன் வீழ்ந்தது? ஒரு தவறான முடிவின் கதை"
-    protagonist: "Nokia"
-    protagonist_age: ""
-    situation: "Finland, 2007 — world's #1 mobile phone company"
-    core_problem: "Refused to adopt touchscreen and app ecosystem"
-    emotional_hook: "iPhone launch-ஐ Nokia 'expensive toy' என்று dismiss செய்தது"
-    turning_point: "2011 — Microsoft partnership, too late"
-    lesson: "Market leaders who stop adapting become cautionary tales"
-    hook_question: "உலகின் #1 phone company எப்படி 6 வருடங்களில் மறைந்தது?"
-    open_loop: "ஆனால் அந்த board meeting-ல் என்ன நடந்தது?"
-    story_mode: biographical
-    content_bucket: business
-    wikipedia_subject: "Nokia"
-    curiosity_score: 9.0
-    emotion_score: 7.5
-    story_score: 9.0
-    lesson_score: 9.0
-
-  - title_ta: "APJ Abdul Kalam — பத்திரிகை விற்ற சிறுவன் இந்தியாவின் missile man ஆன கதை"
-    protagonist: "APJ Abdul Kalam"
-    protagonist_age: "10"
-    situation: "Rameswaram, Tamil Nadu, 1941 — poor fisherman family"
-    core_problem: "World War II stopped newspapers; had to find alternative income"
-    emotional_hook: "அப்பா சொன்னார் — படி, இல்லையென்றால் வாழ்க்கை கஷ்டமாகும்"
-    turning_point: "Teacher Iyadurai Solomon showed him a fighter jet drawing"
-    lesson: "Curiosity and discipline can overcome any background"
-    hook_question: "பத்திரிகை விற்ற சிறுவன் எப்படி India-வின் missile man ஆனார்?"
-    open_loop: "ஆனால் அந்த ஒரு drawing அவரின் வாழ்க்கையை எப்படி மாற்றியது?"
-    story_mode: biographical
-    content_bucket: success_failure
-    wikipedia_subject: "A. P. J. Abdul Kalam"
-    curiosity_score: 9.2
-    emotion_score: 9.0
-    story_score: 9.0
-    lesson_score: 8.5
-
-  - title_ta: "Indra Nooyi — Chennai-யிலிருந்து PepsiCo CEO வரை"
-    protagonist: "Indra Nooyi"
-    protagonist_age: "22"
-    situation: "Chennai, Tamil Nadu → Yale University → PepsiCo boardroom"
-    core_problem: "Indian woman in 1970s corporate America — every door was closed"
-    emotional_hook: "Yale interview-க்கு sari-ல் போனாள் — இன்று அதே sari-ஐ museum-ல் வைத்திருக்கிறார்கள்"
-    turning_point: "1994 — convinced PepsiCo to buy Tropicana against board's wish"
-    lesson: "Staying true to your identity is your strength, not your weakness"
-    hook_question: "சென்னை பெண் எப்படி America-வின் மிகப்பெரிய company-ஐ நடத்தினாள்?"
-    open_loop: "ஆனால் அவள் CEO ஆன அன்று அம்மாவிடம் என்ன சொன்னாள்?"
-    story_mode: biographical
-    content_bucket: business
-    wikipedia_subject: "Indra Nooyi"
-    curiosity_score: 9.0
-    emotion_score: 8.8
-    story_score: 8.8
-    lesson_score: 8.5
-
-  - title_ta: "Dhirubhai Ambani — ₹500 சம்பளத்திலிருந்து Asia-வின் பணக்காரன்"
-    protagonist: "Dhirubhai Ambani"
-    protagonist_age: "16"
-    situation: "Chorwad, Gujarat, 1950 — poor family, no education"
-    core_problem: "Left school at 16, went to Yemen as a petrol station attendant"
-    emotional_hook: "Yemen-ல் petrol station-ல் வேலை செய்தார். சம்பளம் ₹300"
-    turning_point: "Noticed nylon yarn shortage in India — borrowed money, started textile trade"
-    lesson: "Ambition without resources still beats resources without ambition"
-    hook_question: "₹300 சம்பளக்காரன் எப்படி India-வின் மிக பணக்கார குடும்பம் ஆனார்?"
-    open_loop: "ஆனால் ₹500-ல் தொடங்கிய business எப்படி ₹1 lakh crore ஆனது?"
-    story_mode: biographical
-    content_bucket: success_failure
-    wikipedia_subject: "Dhirubhai Ambani"
-    curiosity_score: 9.3
-    emotion_score: 8.5
-    story_score: 9.2
-    lesson_score: 8.0
-
-  - title_ta: "Sundar Pichai — Madurai-ல் தொடங்கி Google CEO வரை"
-    protagonist: "Sundar Pichai"
-    protagonist_age: "12"
-    situation: "Chennai, Tamil Nadu, 1984 — family got first telephone"
-    core_problem: "IIT Kharagpur graduate with no money for Stanford fees"
-    emotional_hook: "Stanford-க்கு பயணிக்க பணமில்லை — scholarship மட்டும் நம்பிக்கை"
-    turning_point: "2004 — joined Google, pitched Google Toolbar, convinced Larry Page"
-    lesson: "Preparation + opportunity = luck that others call talent"
-    hook_question: "Madurai-ல் வளர்ந்தவர் எப்படி Google CEO ஆனார்?"
-    open_loop: "ஆனால் Larry Page-ஐ convince செய்த அந்த meeting எப்படி நடந்தது?"
-    story_mode: biographical
-    content_bucket: success_failure
-    wikipedia_subject: "Sundar Pichai"
-    curiosity_score: 9.0
-    emotion_score: 8.5
-    story_score: 8.8
-    lesson_score: 8.5
-
-  - title_ta: "Ratan Tata — எல்லோரும் சிரித்த Nano car-ன் கதை"
-    protagonist: "Ratan Tata"
+  - title_ta: "ரத்தன் டாடா — ₹1 லட்சத்தில் கார் கொடுக்கலாம் என்று சொன்னவர்"
+    protagonist: "ரத்தன் டாடா"
     protagonist_age: "67"
-    situation: "Mumbai, 2003 — saw family of 4 on scooter in rain"
-    core_problem: "Promised ₹1 lakh car — engineers said impossible"
-    emotional_hook: "Paris Motor Show-ல் world மகிழ்ந்தது. India-ல் political protest நடந்தது"
-    turning_point: "2008 Singur factory eviction — moved entire plant to Sanand in 28 days"
-    lesson: "A dream built for others always finds a way"
-    hook_question: "₹1 lakh car சாத்தியமா என்று உலகம் கேட்டபோது Ratan Tata என்ன செய்தார்?"
-    open_loop: "ஆனால் Nano launch-க்கு ஒரு வாரம் முன்பு என்ன நடந்தது?"
+    situation: "மும்பை, 2003 ஆம் ஆண்டு — ஒரு மழை இரவு"
+    core_problem: "ஒரு லட்சத்தில் கார் கட்டலாம் என்றார். பொறியாளர்கள் சிரித்தனர்."
+    emotional_hook: "உலகம் முழுவதும் சிரித்தது. ஆனால் அவர் மட்டும் சிரிக்கவில்லை."
+    turning_point: "சிங்கூர் தொழிற்சாலை பறிக்கப்பட்டது. 28 நாட்களில் குஜராத் சென்றார்."
+    lesson: "மற்றவர்களுக்காக கட்டும் கனவுகளுக்கு வழி கண்டிப்பாக கிடைக்கும்"
+    hook_question: "₹1 லட்சத்தில் கார் என்பது சாத்தியமா என்று உலகம் கேட்டபோது ரத்தன் டாடா என்ன செய்தார்?"
+    open_loop: "ஆனால் நானோ வெளியீட்டிற்கு ஒரு வாரம் முன்பு என்ன நடந்தது?"
     story_mode: biographical
     content_bucket: business
     wikipedia_subject: "Tata Nano"
-    curiosity_score: 9.0
-    emotion_score: 8.8
-    story_score: 9.0
-    lesson_score: 8.0
+    beats:
+      hook: "2003 ஆம் ஆண்டு. மும்பை தெருவில் ஒரு மழை இரவு. ஒரு ஸ்கூட்டரில் தந்தை, தாய், இரண்டு குழந்தைகள். மழையில் நனைந்தனர். ரத்தன் டாடா அந்த காட்சியை பார்த்தார். அவர் மனதில் ஒரு கேள்வி தோன்றியது — ஏன் இந்த குடும்பத்திற்கு ஒரு கார் இல்லை? அன்றிரவு அவர் ஒரு முடிவெடுத்தார். அது உலகையே அதிர வைத்தது."
+      context: "ரத்தன் டாடா டாடா குழும தலைவர். அவர் இந்தியாவின் மிகப்பெரிய தொழிலதிபர். ஆனால் அவருக்கு மிகவும் பிடித்த கனவு வேறொன்று இருந்தது. ஒரு லட்சம் ரூபாயில் கார். அதாவது சாதாரண இந்தியக் குடும்பம் வாங்கக்கூடிய விலை. பொறியாளர்கள் சொன்னார்கள் — சாத்தியமில்லை. உலக நிபுணர்கள் சொன்னார்கள் — கனவு மட்டுமே. ஆனால் ரத்தன் டாடா கேட்கவில்லை."
+      conflict: "ஐந்து ஆண்டுகள் கடந்தன. பொறியாளர்கள் போராடினார்கள். ஒவ்வொரு பாகமும் மலிவாக வேண்டும். எந்த தரமும் குறையக்கூடாது. இது முரண்பாடு. அதே நேரத்தில் அரசியல் போராட்டம் தொடங்கியது. மேற்கு வங்கத்தில் விவசாயிகள் நிலத்திற்காக போராடினார்கள். தொழிற்சாலை நிறுத்தப்பட்டது. ஆண்டுகள் வீணானது."
+      escalation: "2008 ஆம் ஆண்டு. சிங்கூர் தொழிற்சாலை பூட்டப்பட்டது. ஆயிரக்கணக்கான தொழிலாளர்கள் வேலையிழந்தனர். முதலீடு வீணானது. தொழிற்சாலை கட்டி முடிக்கப்படவில்லை. அரசியல் கட்சிகள் கொண்டாடின. செய்தித்தாள்கள் எழுதின — நானோ கார் கனவு முடிந்தது. ரத்தன் டாடா தோற்றார் என்று உலகம் நினைத்தது."
+      turning_point: "ஆனால் ரத்தன் டாடா சொன்னார் — நாங்கள் நகருகிறோம். 28 நாட்களுக்குள் குஜராத் சானந்துக்கு தொழிற்சாலை மாற்றப்பட்டது. இது உலக வரலாற்றில் மிகவும் வேகமான தொழிற்சாலை மாற்றம். குஜராத் முதலமைச்சர் நரேந்திர மோடி கைகொடுத்தார். 2009 ஆம் ஆண்டு நானோ கார் வெளியிடப்பட்டது."
+      resolution: "நானோ கார் வெளியிடப்பட்டது. ₹1 லட்சம் கனவு நிஜமானது. உலகம் வியந்தது. டைம் இதழ் சிறந்த கண்டுபிடிப்பு என்று பாராட்டியது. ஒரு ஸ்கூட்டர் வேலை செய்யும் குடும்பங்களுக்கு கனவு நனவானது. ரத்தன் டாடா சொன்னது நடந்தது."
+      lesson: "பாடம் என்ன? மற்றவர்களுக்காக கட்டும் கனவுகளை உலகம் நிறுத்த முடியாது. ரத்தன் டாடா நமக்கு இதை சொல்கிறார். இந்த வீடியோ உங்களுக்கு பயனுள்ளதாக இருந்தால் லைக் செய்யுங்கள், சப்ஸ்கிரைப் செய்யுங்கள், பெல் அழுத்துங்கள். நன்றி!"
+
+  - title_ta: "கர்னல் சாண்டர்ஸ் — 1009 முறை நிராகரிக்கப்பட்டவர்"
+    protagonist: "கர்னல் சாண்டர்ஸ்"
+    protagonist_age: "65"
+    situation: "அமெரிக்கா, 1952 — வெறும் ஒரு recipe மட்டும் கையில்"
+    core_problem: "65 வயதில் எல்லாம் இழந்தார். ஒரே ஒரு வழி மட்டும் இருந்தது."
+    emotional_hook: "1009 முறை. அவ்வளவு முறை நிராகரிக்கப்பட்டார். ஆனால் 1010வது முறை..."
+    turning_point: "யூட்டாவில் ஒருவர் ஆம் என்றார். KFC பிறந்தது."
+    lesson: "வயது ஒரு தடையல்ல. விடாமுயற்சி மட்டுமே வெற்றி"
+    hook_question: "65 வயதில் 1009 முறை தோற்றவர் எப்படி பில்லியனர் ஆனார்?"
+    open_loop: "ஆனால் 1010வது முறை என்ன நடந்தது?"
+    story_mode: biographical
+    content_bucket: success_failure
+    wikipedia_subject: "Colonel Sanders"
+    beats:
+      hook: "1009 முறை. அந்த வார்த்தை மட்டும் அவர் மனதில் திரும்பத் திரும்ப ஒலித்தது. 1009 கடைகள் சொன்னன — வேண்டாம். 65 வயது முதியவர். கையில் வெறும் ஒரு சமையல் குறிப்பு. ஆனால் அவர் விட்டுக்கொடுக்கவில்லை. ஏன்? ஏனென்றால் அவருக்கு வேறு வழி இல்லை."
+      context: "அவர் பெயர் ஹார்லாண்ட் சாண்டர்ஸ். கென்டக்கி மாநிலத்தில் ஒரு சாலை ஓரத்தில் உணவகம் வைத்திருந்தார். அவரது கோழி வறுவல் மக்களுக்கு மிகவும் பிடித்திருந்தது. ஆனால் 65 வயதில் ஒரு புதிய நெடுஞ்சாலை அவர் கடை வழியை மாற்றியது. வாடிக்கையாளர்கள் குறைந்தனர். கடன் வந்தது. உணவகம் மூடப்பட்டது. வாழ்க்கை தொடங்கியது."
+      conflict: "அரசாங்கம் அவருக்கு மாதம் 105 டாலர் ஓய்வூதியம் கொடுத்தது. அதுவே முழு வருமானம். அவர் முடிவெடுத்தார் — என் சமையல் குறிப்பை கடைகளுக்கு விற்பேன். ஒவ்வொரு கோழி வறுவலுக்கும் ஒரு சிறிய தொகை கேட்பேன். ஆனால் யாரும் வேண்டவில்லை. முதல் கடை — வேண்டாம். இரண்டாவது — வேண்டாம். பத்தாவது — வேண்டாம். நூறாவது — இல்லை."
+      escalation: "அவர் கார் ஓட்டினார். தூங்கினார். எழுந்தார். மீண்டும் முயன்றார். குளிரில், வெயிலில். 500 கடைகள். 700 கடைகள். 900 கடைகள். யாரும் ஆம் சொல்லவில்லை. வயதான உடம்பு வலித்தது. ஆனால் அவர் நிறுத்தவில்லை. ஏனென்றால் அவர் சொன்னார் — என் சமையல் குறிப்பு நல்லது என்று எனக்கு தெரியும்."
+      turning_point: "1009வது முறை. யூட்டா மாநிலத்தில் ஒரு கடை. அவர் உள்ளே நடந்தார். சமையல் குறிப்பை விளக்கினார். கடை உரிமையாளர் பீட் ஹார்மன் சொன்னார் — ஆம். அந்த ஒரு வார்த்தை எல்லாவற்றையும் மாற்றியது. அவர்கள் சேர்ந்து KFC தொடங்கினர். கென்டக்கி ஃப்ரைட் சிக்கன் உலகிற்கு வந்தது."
+      resolution: "இன்று உலகில் 25,000க்கும் மேற்பட்ட KFC கடைகள் உள்ளன. 145 நாடுகளில். கர்னல் சாண்டர்ஸ் 65 வயதில் தொடங்கினார். 73 வயதில் கோடீஸ்வரர் ஆனார். 1009 நிராகரிப்புகள் அவரை முடிக்கவில்லை. ஒரு ஆம் அவரை மாற்றியது."
+      lesson: "பாடம்: வயது ஒரு தடையல்ல. நிராகரிப்பு ஒரு தடையல்ல. விடாமுயற்சி மட்டுமே வெற்றி. கர்னல் சாண்டர்ஸ் நமக்கு இதை சொல்கிறார். இந்த வீடியோ பயனுள்ளதாக இருந்தால் லைக் செய்யுங்கள், சப்ஸ்கிரைப் செய்யுங்கள், பெல் அழுத்துங்கள். நன்றி!"
+
+  - title_ta: "நோக்கியா ஏன் வீழ்ந்தது? ஒரு அமைதியின் கதை"
+    protagonist: "நோக்கியா"
+    protagonist_age: ""
+    situation: "ஃபின்லாந்து, 2007 — உலகின் நம்பர் 1 போன் நிறுவனம்"
+    core_problem: "அச்சம் ஒரு நிறுவனத்தை அழித்தது"
+    emotional_hook: "2007-ல் 40% சந்தை பங்கு. 2013-ல் கிட்டத்தட்ட பூஜ்யம்."
+    turning_point: "ஐஃபோன் வந்தது. நோக்கியா பொறியாளர்கள் ஆபத்தை அறிந்தனர். ஆனால் சொல்லவில்லை."
+    lesson: "ஒரு நிறுவனத்தை வெல்வது போட்டியாளர் அல்ல — அமைதி"
+    hook_question: "உலகின் நம்பர் 1 போன் நிறுவனம் எப்படி 6 ஆண்டுகளில் மறைந்தது?"
+    open_loop: "ஆனால் நோக்கியா பொறியாளர்களுக்கு முன்பே தெரிந்திருந்தது — ஏன் சொல்லவில்லை?"
+    story_mode: biographical
+    content_bucket: business
+    wikipedia_subject: "Nokia"
+    beats:
+      hook: "2007 ஆம் ஆண்டு. நோக்கியா நிறுவனம் உலகில் 40 சதவீதம் போன்களை விற்றது. உலகில் ஒவ்வொரு இரண்டு பேரில் ஒருவர் நோக்கியா பயன்படுத்தினார். அதே ஆண்டு ஸ்டீவ் ஜாப்ஸ் ஒரு போனை வெளியிட்டார். நோக்கியா தலைவர்கள் சிரித்தார்கள் — இது ஒரு பொம்மை என்றார்கள். ஆறு ஆண்டுகளில் நோக்கியா இல்லாமல் போனது."
+      context: "நோக்கியா ஃபின்லாந்தில் பிறந்தது. 1865 ஆம் ஆண்டு. தொடக்கத்தில் ரப்பர் தயாரிப்பு நிறுவனம். பிறகு கேபிள் தொழில். 1990களில் கைப்பேசி தொழிலில் நுழைந்தது. 2000 ஆம் ஆண்டில் உலகின் மிகப்பெரிய கைப்பேசி நிறுவனமாக மாறியது. சிம்பியன் இயக்க முறைமை. Snake விளையாட்டு. உலகம் நோக்கியாவை நேசித்தது."
+      conflict: "2007 ஆம் ஆண்டு ஐஃபோன் வந்தது. நோக்கியா பொறியாளர்கள் அறிந்தனர் — தங்கள் சிம்பியன் மென்பொருள் பழையதாகி விட்டது. ஆனால் அவர்கள் மேலாளர்களிடம் சொல்லவில்லை. ஏன்? ஏனென்றால் மேலாளர்களுக்கு கெட்ட செய்தி சொல்வது வேலையை இழக்கும் என்று பயந்தார்கள். அந்த அமைதி நிறுவனத்தை அழித்தது."
+      escalation: "ஆண்டுகள் கடந்தன. ஆண்டிராய்டு வந்தது. ஐஃபோன் வளர்ந்தது. நோக்கியா சந்தை பங்கு குறைந்தது. 40 சதவீதத்திலிருந்து 30 சதவீதம். 20 சதவீதம். 10 சதவீதம். நிறுவனம் உள்ளே தெரிந்தது — ஆபத்து வருகிறது. ஆனால் வெளியே சொல்லவில்லை. தலைவர்கள் மாறினார்கள். திட்டங்கள் மாறின. ஆனால் எதுவும் மாறவில்லை."
+      turning_point: "2011 ஆம் ஆண்டு நோக்கியா மைக்ரோசாஃப்டுடன் இணைந்தது. விண்டோஸ் போன் வந்தது. ஆனால் மிகவும் தாமதமானது. சந்தை இழந்துவிட்டது. 2013 ஆம் ஆண்டு மைக்ரோசாஃப்ட் நோக்கியாவை வாங்கியது. ஃபின்லாந்தின் பெரும்பாலான ஊழியர்கள் வேலையிழந்தனர்."
+      resolution: "இன்று நோக்கியா பேரு போன் தொழிலில் இல்லை. ஆனால் நெட்வொர்க் தொழிலில் உள்ளது. 5ஜி தொழில்நுட்பத்தில் முன்னிலையில் உள்ளது. ஒரு நிறுவனம் மாறியது. ஆனால் அந்த தவறை உலகம் மறக்கவில்லை."
+      lesson: "பாடம்: ஒரு நிறுவனத்தை வெல்வது போட்டியாளர் அல்ல — உள்ளே இருக்கும் அமைதி. உண்மையை சொல்லும் கலாச்சாரம் இல்லாத நிறுவனம் வீழும். நோக்கியா நமக்கு இதை சொல்கிறது. இந்த வீடியோ பயனுள்ளதாக இருந்தால் லைக் செய்யுங்கள், சப்ஸ்கிரைப் செய்யுங்கள். நன்றி!"
