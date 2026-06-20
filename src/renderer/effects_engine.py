@@ -23,15 +23,21 @@ from PIL import Image, ImageFilter
 
 
 # ── Tuneable constants ────────────────────────────────────────────────
-JITTER_PX          = 3      # max pixel shift for stop-motion jitter
-JITTER_EVERY_N     = 3      # apply jitter every N frames
-GRAIN_STRENGTH     = 6.0    # gaussian noise std dev (paper texture)
-SHAKE_MAX_PX       = 4      # camera micro-shake amplitude
-SHAKE_SPEED        = 0.7    # how fast the shake oscillates
-INK_BLEED_FRAMES   = 4      # frames for ink-bleed fade-in on new word
-INK_BLUR_RADIUS    = 2.5    # blur radius for ink bleed
-VIGNETTE_STRENGTH  = 0.18   # 0=none, 1=full black corners
-CHALK_BLUR_FRAMES  = 5      # frames for chalk-dust exit smear
+JITTER_PX          = 2      # reduced for CI speed
+JITTER_EVERY_N     = 4      # less frequent for CI speed
+GRAIN_STRENGTH     = 0.0    # DISABLED on CI — most expensive effect
+SHAKE_MAX_PX       = 3      # reduced for CI speed
+SHAKE_SPEED        = 0.7
+INK_BLEED_FRAMES   = 3
+INK_BLUR_RADIUS    = 1.5    # lighter blur for CI speed
+VIGNETTE_STRENGTH  = 0.12   # lighter vignette for CI speed
+CHALK_BLUR_FRAMES  = 4
+
+# CI mode: disable grain (numpy random per-frame is slow at 2100 frames)
+import os as _os
+_CI_MODE = _os.environ.get("GITHUB_ACTIONS", "false") == "true"
+if _CI_MODE:
+    GRAIN_STRENGTH = 0.0   # disable grain on CI
 
 
 # ── Vignette (precomputed once) ───────────────────────────────────────
@@ -242,8 +248,8 @@ def apply_stop_motion_effects(
     if enable_chalk_exit and exit_progress > 0:
         frame = apply_chalk_exit(frame, exit_progress)
 
-    # 2. Grain (paper texture)
-    if enable_grain:
+    # 2. Grain (paper texture) — skip if disabled
+    if enable_grain and GRAIN_STRENGTH > 0:
         frame = apply_grain(frame, frame_index)
 
     # 3. Ink bleed on new words
