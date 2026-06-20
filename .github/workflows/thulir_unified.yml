@@ -103,7 +103,6 @@ jobs:
           python generate_video.py \
             --format long \
             --daily-slot morning_long \
-            --no-shorts \
             $UPLOAD_FLAG 2>&1 | tee /tmp/run.log || (cat /tmp/run.log; exit 1)
 
       - name: Upload run artifacts
@@ -177,7 +176,6 @@ jobs:
           python generate_video.py \
             --format long \
             --daily-slot evening_long \
-            --no-shorts \
             $UPLOAD_FLAG
 
       - name: Upload run artifacts
