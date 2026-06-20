@@ -187,9 +187,10 @@ def _draw_intro(name_ta, tagline_ta, handle, topic_ta, alpha, slide):
 
 def render_lower_third(frame, protagonist, subtitle, beat_frame,
                        total_beat_frames, fps=12):
-    visible = min(fps*4, total_beat_frames-fps)
+    # Only show for first 3s of beat — skip early for speed
+    visible = min(fps*3, total_beat_frames//2)
     if beat_frame > visible or not protagonist:
-        return frame
+        return frame  # fast path — no PIL operations
     if beat_frame < fps*0.4:
         a = _eo(beat_frame/(fps*0.4)); slide=int((1-_eo(beat_frame/(fps*0.4)))*35)
     elif beat_frame < visible - fps*0.5:
