@@ -48,6 +48,7 @@ from src.renderer.intro_renderer import (
 )
 from src.image_engine.image_engine import ImageEngine
 from src.renderer.ae_engine_v3 import render_scene_frames, render_transition
+from src.renderer.shorts_fast import generate_shorts
 
 log = logging.getLogger(__name__)
 
@@ -315,6 +316,41 @@ class VideoPipelineV3:
                 log.error("❌ Upload FAILED: %s", e)
                 import traceback; traceback.print_exc()
                 raise
+        # ── 13. Shorts ───────────────────────────────────────────────
+        if include_shorts and not skip_upload:
+            log.info("Step 13: generating Shorts...")
+            try:
+                hook_beat      = beats[0]
+                hook_seg       = narration_bundle.segments[0]
+                hook_image     = beat_images.get(0)
+                shorts_path    = run_dir / "shorts.mp4"
+                shorts_audio   = Path(hook_seg.audio_path)
+                generate_shorts(
+                    hook_narration = hook_beat.narration_ta,
+                    hook_audio_path= shorts_audio,
+                    hook_image     = hook_image,
+                    protagonist    = topic.protagonist,
+                    output_path    = shorts_path,
+                    duration_s     = min(hook_seg.duration_seconds + 2, 55.0),
+                )
+                # Upload Shorts
+                shorts_title = f"{topic.title_ta[:50]} #Shorts"
+                shorts_slug  = slug + "_s"
+                from src.uploader.youtube_publisher import YouTubePublisher as _YTP
+                shorts_meta  = metadata.__class__(
+                    title_ta       = shorts_title,
+                    title_options  = [shorts_title],
+                    description_ta = (metadata.description_ta or "") + "\n\n#Shorts #துளிர் #TamilShorts",
+                    tags           = (metadata.tags or []) + ["Shorts","YouTube Shorts","Tamil Shorts"],
+                    thumbnail_text = metadata.thumbnail_text,
+                    emotion_trigger= metadata.emotion_trigger,
+                )
+                self.uploader.upload(shorts_path, thumb_path, shorts_meta, topic, shorts_slug)
+                log.info("✅ Shorts uploaded")
+                package = package.model_copy(update={"shorts_video_path": str(shorts_path)})
+            except Exception as e:
+                log.warning("Shorts generation/upload failed: %s", e)
+
         self.topic_scorer.record_topic(topic)
         if daily_slot:
             try:
