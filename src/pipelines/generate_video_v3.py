@@ -1,4 +1,3 @@
-from PIL import Image
 """Clean video pipeline v3 — Pexels images + AE-style render.
 
 Pipeline:
@@ -24,6 +23,7 @@ from pathlib import Path
 from typing import List, Optional
 
 import numpy as np
+from PIL import Image
 
 from src.core.config_loader import get_output_dir, load_emotions_config
 from src.core.free_guard import validate_free_only_mode
