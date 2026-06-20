@@ -332,6 +332,15 @@ class VideoPipelineV3:
             metadata=metadata,
             format="long",
         )
-        (run_dir / "manifest.json").write_text(package.model_dump_json(indent=2))
+        try:
+            (run_dir / "manifest.json").write_text(
+                package.model_dump_json(indent=2))
+        except Exception as e:
+            log.warning("Manifest write failed (%s) — skipping", e)
+            import json as _json
+            (run_dir / "manifest.json").write_text(_json.dumps({
+                "run_id": run_id, "topic": topic.title_ta,
+                "video": str(final_path), "format": "long"
+            }, ensure_ascii=False))
         log.info("Run %s complete — %s", run_id, final_path)
         return package
