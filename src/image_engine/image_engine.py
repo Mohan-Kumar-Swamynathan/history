@@ -118,8 +118,14 @@ def _build_query(beat_keywords: list[str], topic_title: str, beat_type: str) -> 
     }
     base = beat_emotion_query.get(beat_type, "person story moment")
 
-    # Add topic protagonist name if Latin (Pexels can't search Tamil)
-    title_words = [w for w in topic_title.split() if w.isascii() and len(w) > 3]
+    # Use protagonist name if ASCII and meaningful (not No.1, Ltd, vs, etc.)
+    _SKIP = {"no.1","no1","ltd","inc","pvt","vs","the","and","for","with",
+              "from","into","that","this","your","their","about","more"}
+    title_words = [
+        w for w in topic_title.split()
+        if w.isascii() and len(w) > 3 and w.lower().strip(".,!?") not in _SKIP
+        and not w.replace(".","").replace("-","").isdigit()
+    ]
     if title_words:
         return f"{title_words[0]} {base}"
     return base
