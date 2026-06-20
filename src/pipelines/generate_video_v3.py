@@ -1,3 +1,4 @@
+from PIL import Image
 """Clean video pipeline v3 — Pexels images + AE-style render.
 
 Pipeline:
@@ -40,6 +41,11 @@ from src.voice_engine.voice_engine import VoiceEngine
 
 # v3 components
 from src.script.narrative_generator_v3 import NarrativeGeneratorV3
+from src.renderer.intro_renderer import (
+    render_intro_frames,
+    render_lower_third,
+    apply_green_tint,
+)
 from src.image_engine.image_engine import ImageEngine
 from src.renderer.ae_engine_v3 import render_scene_frames, render_transition
 
@@ -135,6 +141,17 @@ class VideoPipelineV3:
 
         # ── 7. Assemble with transitions ──────────────────────────────
         log.info("Assembling video...")
+
+        # Generate branded intro (3.5s)
+        log.info("Rendering intro card...")
+        intro_frames = render_intro_frames(
+            channel_name_ta = "துளிர்",
+            tagline_ta      = "உண்மையான கதைகள். உண்மையான பாடங்கள்.",
+            handle          = "@thulir",
+            topic_ta        = topic.title_ta[:35],
+        )
+        log.info("Intro: %d frames", len(intro_frames))
+
         TRANSITION_FRAMES = 4   # ~0.3s at 12fps — quick wipe like AE
         raw_video_path = run_dir / "raw_video.mp4"
 
@@ -164,8 +181,15 @@ class VideoPipelineV3:
                 enc_proc.stdin.write(raw)
                 prev_hash, prev_bytes = h, raw
 
+        # Write intro frames first
+        for f in intro_frames:
+            write_frame(f)
+
         for batch_i, batch in enumerate(all_frame_batches):
             is_last = batch_i == len(all_frame_batches) - 1
+            beat = beats[batch_i]
+            # Build lower-third subtitle: protagonist + role
+            lt_subtitle = beat.on_screen_text or beat.situation[:30] if hasattr(beat, 'situation') else ""
 
             if batch_i > 0:
                 prev_batch = all_frame_batches[batch_i - 1]
@@ -179,7 +203,21 @@ class VideoPipelineV3:
                 for f in batch[TRANSITION_FRAMES:]:
                     write_frame(f)
             else:
-                for f in batch:
+                for fi, f in enumerate(batch):
+                    # Overlay lower-third name badge
+                    try:
+                        pil_f = Image.fromarray(f)
+                        pil_f = render_lower_third(
+                            pil_f,
+                            protagonist  = beat.protagonist,
+                            subtitle     = lt_subtitle,
+                            beat_frame   = fi,
+                            total_beat_frames = len(batch),
+                            fps          = 12,
+                        )
+                        f = np.array(pil_f)
+                    except Exception:
+                        pass
                     write_frame(f)
 
         enc_proc.stdin.close()
