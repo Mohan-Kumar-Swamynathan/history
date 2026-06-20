@@ -192,22 +192,26 @@ class VideoPipelineV3:
             # Build lower-third subtitle: protagonist + role
             lt_subtitle = beat.on_screen_text or beat.situation[:30] if hasattr(beat, 'situation') else ""
 
+            # Lower-third only on hook + first beat (not all 2100 frames)
+            _show_lower_third = (batch_i == 0)
+
             def _write_batch_frames(frames, start_fi=0):
-                """Write frames with lower-third on all batches."""
+                """Write frames, lower-third only on hook beat."""
                 for fi, f in enumerate(frames):
-                    try:
-                        pil_f = Image.fromarray(f)
-                        pil_f = render_lower_third(
-                            pil_f,
-                            protagonist       = beat.protagonist,
-                            subtitle          = lt_subtitle,
-                            beat_frame        = start_fi + fi,
-                            total_beat_frames = len(batch),
-                            fps               = 12,
-                        )
-                        f = np.array(pil_f)
-                    except Exception:
-                        pass
+                    if _show_lower_third and (start_fi + fi) < 36:  # first 3s
+                        try:
+                            pil_f = Image.fromarray(f)
+                            pil_f = render_lower_third(
+                                pil_f,
+                                protagonist       = beat.protagonist,
+                                subtitle          = lt_subtitle,
+                                beat_frame        = start_fi + fi,
+                                total_beat_frames = len(batch),
+                                fps               = 12,
+                            )
+                            f = np.array(pil_f)
+                        except Exception:
+                            pass
                     write_frame(f)
 
             if batch_i > 0:
