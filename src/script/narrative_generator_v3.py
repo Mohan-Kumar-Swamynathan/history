@@ -94,9 +94,12 @@ SCRIPT STRUCTURE (7 beats, mandatory order):
    Conversational. Personal. Then natural CTA (like, subscribe, bell).
 
 WRITING RULES:
-- Each beat: {min_words}-{max_words} Tamil words MAXIMUM (2-3 short sentences of 8-12 words each)
-- CRITICAL: Keep each beat short and punchy — quality over quantity
-- The LLM has token limits — shorter beats ensure complete JSON response
+- Each beat: {min_words}-{max_words} Tamil words MAXIMUM (2-3 short sentences)
+- LANGUAGE: 100% Tamil ONLY. Zero English words. Not even "video", "like", "subscribe" in English.
+  Use: வீடியோ, லைக், சப்ஸ்கிரைப், பெல்
+- NUMBERS: Never write "1950-ல்" — write "1950 ஆம் ஆண்டில்". Never use hyphen with Tamil suffix.
+- NO: "startup", "CEO", "company", "business", "phone", "mobile", "offline", "online"
+  YES: தொழில், தலைமை நிர்வாகி, நிறுவனம், வணிகம், தொலைபேசி, கைபேசி
 - Conversational Tamil — பேசும் style, NOT எழுத்து style
 - Every beat: at least one SPECIFIC number, year, or place from the facts
 - No invented facts. If fact is uncertain, say "சொல்கிறார்கள்" or "கதை போகிறது"
