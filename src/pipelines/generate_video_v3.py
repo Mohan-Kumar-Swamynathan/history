@@ -131,7 +131,7 @@ class VideoPipelineV3:
                 image_panel    = image_panel,
                 duration_s     = beat.duration_seconds,
                 word_timings   = seg.word_timings,
-                fps            = 12,
+                fps            = 8,
                 scene_idx      = i,
             )
 
