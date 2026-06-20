@@ -42,42 +42,93 @@ FONT_SIZES  = [130, 108, 90, 76, 64, 54]
 
 _FONT_CACHE: dict = {}
 
+# Tamil Unicode range
+_TA_START, _TA_END = 0x0B80, 0x0BFF
+
+TAMIL_FONT_PATHS = [
+    "/usr/share/fonts/truetype/noto/NotoSansTamil-Black.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSansTamil-Regular.ttf",
+]
+LATIN_FONT_PATHS = [
+    "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf",
+    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+]
+
+def _resolve_font_path(paths: list) -> str:
+    import os
+    for p in paths:
+        if os.path.exists(p):
+            return p
+    return paths[0]  # let truetype raise the real error
 
 def _font(script: str, size: int) -> ImageFont.FreeTypeFont:
     key = (script, size)
     if key not in _FONT_CACHE:
-        paths = {
-            "ta": "/usr/share/fonts/truetype/noto/NotoSansTamil-Black.ttf",
-            "en": "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf",
-        }
+        path = _resolve_font_path(TAMIL_FONT_PATHS if script == "ta" else LATIN_FONT_PATHS)
         try:
-            _FONT_CACHE[key] = ImageFont.truetype(paths.get(script, paths["en"]), size)
+            _FONT_CACHE[key] = ImageFont.truetype(path, size)
         except Exception:
-            _FONT_CACHE[key] = ImageFont.load_default()
+            try:
+                # Last resort: any available font
+                import subprocess
+                result = subprocess.run(["fc-list", "--format=%{file}\n", ":lang=ta"],
+                                        capture_output=True, text=True)
+                fallback = result.stdout.strip().splitlines()
+                if fallback and script == "ta":
+                    _FONT_CACHE[key] = ImageFont.truetype(fallback[0], size)
+                else:
+                    _FONT_CACHE[key] = ImageFont.load_default()
+            except Exception:
+                _FONT_CACHE[key] = ImageFont.load_default()
     return _FONT_CACHE[key]
 
 
-def _script(ch: str) -> str:
-    cp = ord(ch)
-    return "ta" if (0x0B80 <= cp <= 0x0BFF) else "en"
+def _is_tamil(ch: str) -> bool:
+    return _TA_START <= ord(ch) <= _TA_END
 
 
-def _word_script(word: str) -> str:
-    ta = sum(1 for c in word if 0x0B80 <= ord(c) <= 0x0BFF)
-    return "ta" if ta > len(word) / 2 else "en"
+def _segment_text(text: str) -> list[tuple[str, str]]:
+    """Split text into (segment, script) pairs for character-accurate rendering.
+    e.g. "Rathina-கிடைத்தது" → [("Rathina-", "en"), ("கிடைத்தது", "ta")]
+    """
+    if not text:
+        return []
+    segments = []
+    cur = ""
+    cur_script = "ta" if _is_tamil(text[0]) else "en"
+    for ch in text:
+        ch_script = "ta" if _is_tamil(ch) else "en"
+        if ch_script != cur_script:
+            if cur:
+                segments.append((cur, cur_script))
+            cur = ch
+            cur_script = ch_script
+        else:
+            cur += ch
+    if cur:
+        segments.append((cur, cur_script))
+    return segments
 
 
 def _text_width(draw: ImageDraw.ImageDraw, text: str, size: int) -> int:
-    sc = _word_script(text)
-    return draw.textbbox((0, 0), text, font=_font(sc, size))[2]
+    """Measure text width with per-segment font switching."""
+    total = 0
+    for seg, sc in _segment_text(text):
+        total += draw.textbbox((0, 0), seg, font=_font(sc, size))[2]
+    return total
 
 
 def _draw_text(draw: ImageDraw.ImageDraw, text: str, x: int, y: int,
                size: int, color: tuple) -> int:
-    sc = _word_script(text)
-    f  = _font(sc, size)
-    draw.text((x, y), text, font=f, fill=color)
-    return x + draw.textbbox((0, 0), text, font=f)[2]
+    """Draw text with per-character font switching — no more boxes."""
+    cx = x
+    for seg, sc in _segment_text(text):
+        f = _font(sc, size)
+        draw.text((cx, y), seg, font=f, fill=color)
+        cx += draw.textbbox((0, 0), seg, font=f)[2]
+    return cx
 
 
 def _wrap_words(words: List[str], size: int, max_w: int,
