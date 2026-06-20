@@ -13,14 +13,14 @@ STAGE_SHORTS_SCRIPT = "shorts_script"
 STAGE_METADATA = "metadata"
 
 # hybrid: topic + long script only (shorts derived from long — no extra LLM call)
-HYBRID_LLM_STAGES = frozenset({STAGE_TOPIC, STAGE_LONG_SCRIPT})
+HYBRID_LLM_STAGES = frozenset({STAGE_TOPIC, STAGE_LONG_SCRIPT, STAGE_METADATA})
 
 STAGE_MAX_TOKENS = {
-    STAGE_TOPIC: 1500,
-    STAGE_RESEARCH: 800,
-    STAGE_LONG_SCRIPT: 8000,
+    STAGE_TOPIC:        2000,   # 10 candidates with scores
+    STAGE_RESEARCH:     1500,   # Wikipedia synthesis
+    STAGE_LONG_SCRIPT:  4096,   # max GitHub Models can return reliably
     STAGE_SHORTS_SCRIPT: 1200,
-    STAGE_METADATA: 1000,
+    STAGE_METADATA:     2000,   # 10 titles + description + tags
 }
 
 
