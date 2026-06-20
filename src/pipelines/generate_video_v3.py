@@ -192,6 +192,24 @@ class VideoPipelineV3:
             # Build lower-third subtitle: protagonist + role
             lt_subtitle = beat.on_screen_text or beat.situation[:30] if hasattr(beat, 'situation') else ""
 
+            def _write_batch_frames(frames, start_fi=0):
+                """Write frames with lower-third on all batches."""
+                for fi, f in enumerate(frames):
+                    try:
+                        pil_f = Image.fromarray(f)
+                        pil_f = render_lower_third(
+                            pil_f,
+                            protagonist       = beat.protagonist,
+                            subtitle          = lt_subtitle,
+                            beat_frame        = start_fi + fi,
+                            total_beat_frames = len(batch),
+                            fps               = 12,
+                        )
+                        f = np.array(pil_f)
+                    except Exception:
+                        pass
+                    write_frame(f)
+
             if batch_i > 0:
                 prev_batch = all_frame_batches[batch_i - 1]
                 tail = prev_batch[-TRANSITION_FRAMES:] if len(prev_batch) >= TRANSITION_FRAMES else prev_batch
@@ -200,26 +218,10 @@ class VideoPipelineV3:
                     t_progress = (ti + 1) / TRANSITION_FRAMES
                     blended = render_transition(tail[ti], head[ti], t_progress, style="flipbook")
                     write_frame(blended)
-                # Write rest of batch after transition
-                for f in batch[TRANSITION_FRAMES:]:
-                    write_frame(f)
+                # Write rest of batch WITH lower-third
+                _write_batch_frames(batch[TRANSITION_FRAMES:], start_fi=TRANSITION_FRAMES)
             else:
-                for fi, f in enumerate(batch):
-                    # Overlay lower-third name badge
-                    try:
-                        pil_f = Image.fromarray(f)
-                        pil_f = render_lower_third(
-                            pil_f,
-                            protagonist  = beat.protagonist,
-                            subtitle     = lt_subtitle,
-                            beat_frame   = fi,
-                            total_beat_frames = len(batch),
-                            fps          = 12,
-                        )
-                        f = np.array(pil_f)
-                    except Exception:
-                        pass
-                    write_frame(f)
+                _write_batch_frames(batch)
 
         enc_proc.stdin.close()
         enc_proc.wait()
