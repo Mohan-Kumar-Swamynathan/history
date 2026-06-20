@@ -17,7 +17,7 @@ script_targets:
   beat_count:           7
   min_words_per_beat:   100
   max_words_per_beat:   150
-  target_words_per_beat:120
+  target_words_per_beat: 120
   min_words_total:      600      # 600 Tamil words ≈ 5.5 min
   target_words_total:   840      # 840 Tamil words ≈ 7.5 min (sweet spot)
   max_words_total:      1200     # 1200 Tamil words ≈ 11 min
