@@ -95,11 +95,15 @@ SCRIPT STRUCTURE (7 beats, mandatory order):
 
 WRITING RULES:
 - Each beat: {min_words}-{max_words} Tamil words MAXIMUM (2-3 short sentences)
-- LANGUAGE: 100% Tamil ONLY. Zero English words. Not even "video", "like", "subscribe" in English.
-  Use: வீடியோ, லைக், சப்ஸ்கிரைப், பெல்
-- NUMBERS: Never write "1950-ல்" — write "1950 ஆம் ஆண்டில்". Never use hyphen with Tamil suffix.
-- NO: "startup", "CEO", "company", "business", "phone", "mobile", "offline", "online"
-  YES: தொழில், தலைமை நிர்வாகி, நிறுவனம், வணிகம், தொலைபேசி, கைபேசி
+- LANGUAGE: 100% PURE TAMIL. Every single word must be Tamil.
+  STRICTLY FORBIDDEN: IIT, Stanford, Google, Harvard, CEO, MBA, startup, company, Kharagpur,
+  scholarship, fees, graduate, rejected, failed, success, business, phone, online, offline,
+  poverty, freedom, victory, professor, director, engineer — ALL English words forbidden.
+  USE INSTEAD: ஐஐடி, ஸ்டான்போர்டு, கூகுள், ஹார்வர்டு, தலைமை நிர்வாகி, எம்பிஏ,
+  தொழில், நிறுவனம், கட்டணம், பட்டதாரி, நிராகரிக்கப்பட்டார், தோல்வி,
+  வெற்றி, வணிகம், தொலைபேசி, கல்வி உதவித்தொகை
+- NUMBERS: "1950 ஆம் ஆண்டில்" NOT "1950-ல்". "அறுபத்தி ஐந்து" NOT "65".
+- WRITE AS IF: speaking to a Tamil friend who knows NO English at all.
 - Conversational Tamil — பேசும் style, NOT எழுத்து style
 - Every beat: at least one SPECIFIC number, year, or place from the facts
 - No invented facts. If fact is uncertain, say "சொல்கிறார்கள்" or "கதை போகிறது"
@@ -118,6 +122,57 @@ Return ONLY JSON array of 7 objects:
   "retention_hook": "open loop question at end of this beat (optional)"
 }}]"""
 
+
+
+import re as _re
+
+def _purify_tamil(text: str) -> str:
+    """Remove English sentences from Tamil narration.
+    
+    Keeps: Tamil text, numbers, punctuation, proper nouns within Tamil sentences.
+    Removes: Full English sentences (lines where majority chars are ASCII letters).
+    """
+    sentences = _re.split(r'(?<=[.!?।])\s+', text)
+    tamil_sentences = []
+    for s in sentences:
+        s = s.strip()
+        if not s:
+            continue
+        # Count Tamil chars vs ASCII letters
+        tamil_chars = sum(1 for c in s if 0x0B80 <= ord(c) <= 0x0BFF)
+        ascii_letters = sum(1 for c in s if c.isalpha() and ord(c) < 128)
+        total_alpha = tamil_chars + ascii_letters
+        if total_alpha == 0:
+            continue
+        # If more than 60% ASCII letters → English sentence → skip
+        if ascii_letters / total_alpha > 0.6:
+            log.warning("Removing English sentence from script: %s", s[:60])
+            continue
+        # Replace remaining English words within Tamil sentence with Tamil equivalents
+        s = _replace_english_words(s)
+        tamil_sentences.append(s)
+    return " ".join(tamil_sentences) if tamil_sentences else text
+
+
+_EN_REPLACEMENTS = {
+    r"\bIIT\b":         "ஐஐடி",
+    r"\bStanford\b":    "ஸ்டான்போர்டு",
+    r"\bGoogle\b":      "கூகுள்",
+    r"\bMBA\b":         "எம்பிஏ",
+    r"\bCEO\b":         "தலைமை நிர்வாகி",
+    r"\bscholarship\b": "உதவித்தொகை",
+    r"\bgraduat\w*\b": "பட்டதாரி",
+    r"\bfees\b":        "கட்டணம்",
+    r"\bpoverty\b":     "வறுமை",
+    r"\brejected\b":    "நிராகரிக்கப்பட்டார்",
+    r"\bfailed\b":      "தோற்றார்",
+    r"\bsuccess\b":     "வெற்றி",
+}
+
+def _replace_english_words(text: str) -> str:
+    for pattern, replacement in _EN_REPLACEMENTS.items():
+        text = _re.sub(pattern, replacement, text, flags=_re.IGNORECASE)
+    return text
 
 class NarrativeGeneratorV3:
     def generate(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
@@ -160,6 +215,8 @@ class NarrativeGeneratorV3:
         for i, item in enumerate(beat_data[:7]):
             bt  = resolve_beat_type(item.get("beat_type"), STORY_STRUCTURE[i % len(STORY_STRUCTURE)])
             nar = item.get("narration_ta", "").strip()
+            # Post-process: remove English sentences (LLM sometimes ignores language rule)
+            nar = _purify_tamil(nar)
             wc  = len(nar.split())
             if wc < 150:
                 log.warning("Beat %d too short: %d words", i, wc)
