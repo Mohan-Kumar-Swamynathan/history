@@ -71,10 +71,11 @@ class StoryMode(str, Enum):
 
 
 class ContentBucket(str, Enum):
-    SUCCESS_FAILURE = "success_failure"
-    BUSINESS = "business"
+    SUCCESS_FAILURE  = "success_failure"
+    BUSINESS         = "business"
     HISTORICAL_STORY = "historical_story"
-    PSYCHOLOGY = "psychology"
+    PSYCHOLOGY       = "psychology"
+    SCIENCE          = "science"
 
 
 class RetentionHookType(str, Enum):
