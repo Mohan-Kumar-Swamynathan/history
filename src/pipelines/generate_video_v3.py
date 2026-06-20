@@ -261,35 +261,60 @@ class VideoPipelineV3:
         )
 
         # ── 10. Subtitles ─────────────────────────────────────────────
-        srt_path = self.subtitle_engine.write_srt(
-            narration_bundle.all_word_timings, run_dir / "subtitles.srt"
-        )
-        ass_path = self.subtitle_engine.write_ass(
-            narration_bundle.all_word_timings, run_dir / "subtitles.ass"
-        )
+        log.info("Step 10: subtitles...")
         final_path = run_dir / "video.mp4"
-        self.subtitle_engine.burn_ass_into_video(
-            muxed_path, ass_path, final_path,
-            word_timings=narration_bundle.all_word_timings,
-            fps=12,
-        )
+        srt_path   = run_dir / "subtitles.srt"
+        ass_path   = run_dir / "subtitles.ass"
+        try:
+            srt_path = self.subtitle_engine.write_srt(
+                narration_bundle.all_word_timings, srt_path)
+            ass_path = self.subtitle_engine.write_ass(
+                narration_bundle.all_word_timings, ass_path)
+            self.subtitle_engine.burn_ass_into_video(
+                muxed_path, ass_path, final_path,
+                word_timings=narration_bundle.all_word_timings, fps=12)
+            log.info("✅ Subtitles burned")
+        except Exception as e:
+            log.warning("Subtitle step failed (%s) — copying muxed as final", e)
+            import shutil; shutil.copy(muxed_path, final_path)
+            srt_path.write_text("", encoding="utf-8")
 
         # ── 11. Metadata + thumbnail ──────────────────────────────────
+        log.info("Step 11: metadata + thumbnail...")
         chapters = [{"time": "00:00:00", "title": b.beat_type.value} for b in beats]
-        metadata = self.metadata_gen.generate(topic, beats, chapters)
-        thumb_path = self.thumbnail_gen.generate(
-            topic, run_dir / "thumbnail.jpg",
-            hook_frame=hook_frame,
-            thumbnail_text=metadata.thumbnail_text,
-            emotion_trigger=metadata.emotion_trigger,
-        )
+        try:
+            metadata = self.metadata_gen.generate(topic, beats, chapters)
+            log.info("✅ Metadata done: %s", metadata.title_ta[:40])
+        except Exception as e:
+            log.warning("Metadata failed (%s) — offline", e)
+            from src.seo.metadata_generator import MetadataGenerator as MG
+            metadata = MG()._offline(topic, "", beats)
+
+        try:
+            thumb_path = self.thumbnail_gen.generate(
+                topic, run_dir / "thumbnail.jpg",
+                hook_frame=hook_frame,
+                thumbnail_text=metadata.thumbnail_text,
+                emotion_trigger=metadata.emotion_trigger)
+            log.info("✅ Thumbnail done")
+        except Exception as e:
+            log.warning("Thumbnail failed (%s) — blank", e)
+            from PIL import Image as _PILImg
+            thumb_path = run_dir / "thumbnail.jpg"
+            _PILImg.new("RGB", (1280, 720), (29, 48, 16)).save(thumb_path)
 
         # ── 12. Upload ────────────────────────────────────────────────
+        log.info("Step 12: upload (skip=%s)...", skip_upload)
         slug = hashlib.md5(topic.title_ta.encode()).hexdigest()[:12]
         if not skip_upload:
-            self.uploader.upload(final_path, thumb_path, metadata, topic, slug)
-            log.info("✅ Uploaded to YouTube")
-
+            try:
+                result = self.uploader.upload(
+                    final_path, thumb_path, metadata, topic, slug)
+                log.info("✅ Uploaded: %s", result.get("youtube_url", "?"))
+            except Exception as e:
+                log.error("❌ Upload FAILED: %s", e)
+                import traceback; traceback.print_exc()
+                raise
         self.topic_scorer.record_topic(topic)
         if daily_slot:
             try:
