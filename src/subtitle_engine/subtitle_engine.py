@@ -16,14 +16,38 @@ from src.core.models import WordTiming
 log = logging.getLogger(__name__)
 
 
+from dataclasses import dataclass as _dc
+
+@_dc
+class _Phrase:
+    text: str; start_ms: int; end_ms: int
+
+def _group_into_phrases(timings, max_words=5):
+    """Group word timings into 4-6 word phrases — natural reading."""
+    if not timings: return []
+    phrases, cur_words, cur_start, cur_end = [], [], 0, 0
+    for i, t in enumerate(timings):
+        if not cur_words: cur_start = t.start_ms
+        cur_words.append(t.word); cur_end = t.end_ms
+        is_last  = (i == len(timings) - 1)
+        next_gap = (timings[i+1].start_ms - t.end_ms) if not is_last else 9999
+        ends_s   = any(t.word.endswith(p) for p in [".", "!", "?", "।", "॥"])
+        if len(cur_words) >= max_words or next_gap > 480 or ends_s or is_last:
+            phrases.append(_Phrase(" ".join(cur_words), cur_start, cur_end))
+            cur_words = []
+    return phrases
+
+
 class SubtitleEngine:
     def write_srt(self, word_timings: List[WordTiming], output_path: Path) -> Path:
+        """Group into 4-5 word phrases — not word-by-word (jarring)."""
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        lines = []
-        for index, timing in enumerate(word_timings, start=1):
+        phrases = _group_into_phrases(word_timings, max_words=5)
+        lines   = []
+        for index, phrase in enumerate(phrases, start=1):
             lines.append(str(index))
-            lines.append(f"{_ms_to_srt(timing.start_ms)} --> {_ms_to_srt(timing.end_ms)}")
-            lines.append(timing.word)
+            lines.append(f"{_ms_to_srt(phrase.start_ms)} --> {_ms_to_srt(phrase.end_ms)}")
+            lines.append(phrase.text)
             lines.append("")
         output_path.write_text("\n".join(lines), encoding="utf-8")
         return output_path
