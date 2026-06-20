@@ -185,7 +185,7 @@ def _draw_intro(name_ta, tagline_ta, handle, topic_ta, alpha, slide):
         tease_sz = 42
         tease_f = _font("ta", tease_sz)
         tease = f"இன்றைய கதை: {topic_ta[:38]}"
-        t2y = ty + (tb[3]-tb[1]) + 30 + slide
+        t2y = ty + tag_sz + 30 + slide
         _draw_mixed(draw, tease, nx, t2y, tease_sz, _ab(INK, CREAM, alpha*0.75))
 
     # ── Bottom strip (dark green like banner left) ────────────────
