@@ -1,64 +1,42 @@
-dedup_days: 30
-default_category: storytelling
-candidate_count: 20
-min_accept_score: 7.5
-story_mode_rotation: mixed
+# துளிர் content bible — topic configuration
+# Only topics scoring 8+ on all 7 dimensions are accepted
 
-content_mix:
-  success_failure: 0.40
-  business: 0.25
-  historical_story: 0.20
-  psychology: 0.15
+score_gate: 8.0        # minimum overall score to accept a topic
+dedup_days: 30         # days before same protagonist can repeat
 
-scoring_weights:
-  curiosity: 0.40
-  emotion: 0.25
-  story: 0.20
-  lesson: 0.15
+content_pillars:
+  success_failure:   0.40   # Extraordinary People
+  historical_story:  0.25   # History Stories
+  business:          0.15   # Business Stories
+  psychology:        0.10   # Strange True Stories (weird, unexpected)
+  science:           0.10   # Science & Discovery
+
+scoring_dimensions:
+  - curiosity_score      # Does it make people unable to stop watching?
+  - emotion_score        # Fear, hope, triumph, regret, surprise
+  - conflict_score       # Clear antagonist or obstacle
+  - shock_score          # Unexpected twist or counterintuitive fact
+  - story_score          # Clear setup → conflict → resolution arc
+  - thumbnail_score      # Can be captured in 1 image + 2-4 words
+  - tamil_score          # Tamil audience personal connection
+
+good_topic_test: "Makes viewers say: Wow, I never knew that."
+bad_topic_test:  "Feels like a school lesson."
 
 blocklist_patterns:
+  - "history of"
+  - "timeline of"
+  - "வரலாறு பற்றி"
+  - "பற்றிய வரலாறு"
+  - "introduction to"
   - "top 10"
-  - "top 5"
   - "வேலை செய்யுங்கள்"
-  - "வெற்றி ரகசியம்"
   - "motivation tips"
-  - "how to succeed"
-  - "generic motivation"
 
 script_targets:
-  long_beat_count: 6
-  long_min_words: 360
-  long_max_words: 450
-  long_target_words: 400
-  long_min_words_per_beat: 50
-  long_max_words_per_beat: 75
-  long_target_minutes: 5
-  shorts_min_words: 80
-  shorts_max_words: 150
-  shorts_beat_count: 5
-
-# High-quality story seeds — real people, strong hooks
-# LLM uses these as reference quality bar
-story_seeds:
-  - protagonist: "Colonel Sanders"
-    hook: "1009 முறை நிராகரிக்கப்பட்டார். 65 வயதில் KFC தொடங்கினார்."
-    bucket: success_failure
-  - protagonist: "Nokia"
-    hook: "உலகின் #1 phone company. ஒரு தவறான முடிவில் அழிந்தது."
-    bucket: business
-  - protagonist: "APJ Abdul Kalam"
-    hook: "பத்திரிகை விற்ற சிறுவன். இந்தியாவின் missile man ஆனார்."
-    bucket: success_failure
-  - protagonist: "Indra Nooyi"
-    hook: "Tamil family. Yale MBA. Pepsi CEO — 12 ஆண்டுகள்."
-    bucket: business
-  - protagonist: "Dhirubhai Ambani"
-    hook: "₹500 சம்பளம். Asia-வின் பணக்காரன் ஆனார்."
-    bucket: success_failure
-
-categories:
-  - storytelling
-  - success_failure
-  - business
-  - historical_story
-  - psychology
+  beat_count:         7        # HOOK + SETUP + CONFLICT + WORST + TURN + RESOLUTION + LESSON
+  min_words_per_beat: 200
+  max_words_per_beat: 350
+  target_words_total: 1750     # 7 beats × 250 words = ~10 min at Tamil TTS pace
+  min_words_total:    1500     # 8 min minimum
+  max_words_total:    2500     # 15 min maximum
