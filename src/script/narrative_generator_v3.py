@@ -220,7 +220,7 @@ Return ONLY the Tamil narration text, no JSON."""
                 log.warning("Beat %d expansion failed: %s", i, e)
         return script
     def _offline_script(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
-        """Grounded offline script — uses research facts, no LLM."""
+        """Pure Tamil offline script — no English mixing, no date-dash issue."""
         name  = topic.protagonist
         facts = research.story_facts
         get   = lambda i, d="": facts[i] if i < len(facts) else d
@@ -232,22 +232,45 @@ Return ONLY the Tamil narration text, no JSON."""
                 protagonist=name, visual_keywords=[bt.value, "person", "story"],
             )
 
+        # Format year in Tamil — avoid "1950-ல்" which TTS reads as "1950 dash ல்"
         yr = dates[0] if dates else ""
-        yr_txt = f"{yr}-ல் " if yr else ""
+        yr_txt = f"{yr} ஆம் ஆண்டு " if yr else ""
+
+        situation = topic.situation or get(1, "")
+        # Remove English from situation if any
+        import re
+        situation_ta = re.sub(r'[A-Za-z,]+', '', situation).strip()
 
         return NarrativeScript(topic=topic, format="long", beats=[
             beat(BeatType.HOOK,
-                f"{topic.emotional_hook or get(0)}. {topic.hook_question or 'இந்த கதை உங்களை திரும்பிப் பார்க்க வைக்கும்.'} {topic.open_loop or ''}".strip()),
+                f"{topic.emotional_hook or get(0, 'இது ஒரு நம்பமுடியாத கதை')}. "
+                f"{topic.hook_question or 'இந்த கதை உங்களை திரும்பிப் பார்க்க வைக்கும்.'}"),
             beat(BeatType.CONTEXT,
-                f"{yr_txt}{name} — {topic.situation or get(1)}. அந்த நாட்களில் யாரும் கற்பனை கூட செய்யவில்லை என்ன நடக்கப் போகிறது என்று. {get(2, '')}".strip()),
+                f"{yr_txt}{name} பற்றி கேட்டிருப்பீர்கள். "
+                f"ஆனால் இந்த கதை யாரும் சொல்லாதது. "
+                f"{situation_ta}. "
+                f"அந்த நாட்களில் யாரும் கற்பனை கூட செய்யவில்லை என்ன நடக்கப் போகிறது என்று."),
             beat(BeatType.CONFLICT,
-                f"{topic.core_problem or get(3)}. {get(4, 'தோல்வி மேல் தோல்வி வந்தது.')} யாரும் {name}-ஐ நம்பவில்லை. ஆனால் அவர் விட்டுக்கொடுக்கவில்லை."),
+                f"{topic.core_problem or get(3, 'தோல்வி வந்தது')}. "
+                f"தோல்வி மேல் தோல்வி வந்தது. "
+                f"யாரும் நம்பவில்லை. "
+                f"ஆனால் {name} விட்டுக்கொடுக்கவில்லை."),
             beat(BeatType.ESCALATION,
-                f"{get(5, 'நிலைமை இன்னும் மோசமானது.')} {get(6, '')} இதுதான் மிகவும் இருண்ட தருணம். வெளியே வழி தெரியவில்லை."),
+                f"நிலைமை இன்னும் மோசமானது. "
+                f"{get(5, 'எல்லா வழிகளும் மூடிக்கொண்டன.')} "
+                f"இதுதான் மிகவும் இருண்ட தருணம். "
+                f"இனி முடியாது என்று தோன்றியது."),
             beat(BeatType.TURNING_POINT,
-                f"{topic.turning_point or get(7, 'திடீரென்று ஒரு மாற்றம்')}. அந்த ஒரு நிமிடம் எல்லாவற்றையும் மாற்றியது. {get(8, '')}"),
+                f"{topic.turning_point or get(7, 'திடீரென்று ஒரு மாற்றம்')}. "
+                f"அந்த ஒரு நிமிடம் எல்லாவற்றையும் மாற்றியது. "
+                f"இனி வேறொரு வழி தெரிந்தது."),
             beat(BeatType.RESOLUTION,
-                f"{get(9, name + ' வெற்றி அடைந்தார்')}. உலகம் அவரை வேறுவிதமாகப் பார்க்க ஆரம்பித்தது. {get(10, '')} இன்று அந்த பெயர் மறக்க முடியாதது."),
+                f"{name} மீண்டும் எழுந்தார். "
+                f"உலகம் அவரை வேறுவிதமாகப் பார்க்க ஆரம்பித்தது. "
+                f"இன்று அந்த பெயர் மறக்க முடியாதது."),
             beat(BeatType.LESSON,
-                f"பாடம்: {topic.lesson or get(11, 'தோல்வி முடிவல்ல')}. {name}-ன் கதை நமக்கு இதை சொல்கிறது. இந்த video பயனுள்ளதாக இருந்தால் like செய்யுங்கள், subscribe செய்யுங்கள், bell icon அழுத்துங்கள். நன்றி!"),
+                f"பாடம் என்ன? {topic.lesson or 'தோல்வி முடிவல்ல, ஒரு படி மட்டுமே'}. "
+                f"{name} நமக்கு இதை சொல்கிறார். "
+                f"இந்த வீடியோ பயனுள்ளதாக இருந்தால் லைக் செய்யுங்கள், "
+                f"சப்ஸ்கிரைப் செய்யுங்கள், பெல் அழுத்துங்கள். நன்றி!"),
         ])
