@@ -183,9 +183,20 @@ class VideoPipelineV3:
                 enc_proc.stdin.write(raw)
                 prev_hash, prev_bytes = h, raw
 
-        # Write intro frames first
+        # Write intro frames first (3.5s @ 12fps = 42 frames)
+        # These have NO word timings — pure branding
         for f in intro_frames:
             write_frame(f)
+        
+        # Offset all word timings by intro duration so subtitles sync correctly
+        INTRO_OFFSET_MS = int(len(intro_frames) / 12 * 1000)  # ~3500ms
+        for i, timing in enumerate(narration_bundle.all_word_timings):
+            narration_bundle.all_word_timings[i] = timing.model_copy(
+                update={
+                    "start_ms": timing.start_ms + INTRO_OFFSET_MS,
+                    "end_ms":   timing.end_ms   + INTRO_OFFSET_MS,
+                }
+            )
 
         for batch_i, batch in enumerate(all_frame_batches):
             is_last = batch_i == len(all_frame_batches) - 1
