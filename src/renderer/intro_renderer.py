@@ -1,298 +1,225 @@
-"""Thulir channel intro renderer.
+"""Thulir intro renderer — matches exact channel branding.
 
-Renders a 3.5s branded intro card before every video:
-
-Layout:
-  - Full frame: BRAND_WHITE background with subtle green gradient bottom edge
-  - Center: Channel name "துளிர்" in large Tamil font, BRAND_PRIMARY green
-  - Below: Tagline in smaller font, BRAND_GREY
-  - Bottom strip: BRAND_PRIMARY green bar with channel handle "@thulir"
-  - Animation: text fades + slides up over 1s, holds 2s, fades out 0.5s
-
-Also renders a lower-third name card for first 4 seconds of each beat
-showing who is being talked about.
+Banner aesthetic:
+  - Warm cream/golden sky background (like the banner)
+  - Deep forest green brush stroke on left (like banner)
+  - "துளிர்" in dark forest green, same weight as banner lettering
+  - Leaf/sprout SVG on right (like banner)
+  - Tagline in mid-green
+  - Bottom dark green strip with @thulir handle
 """
 
 from __future__ import annotations
-
-import math
-from pathlib import Path
+import math, os
 from typing import List
-
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 W, H = 1920, 1080
 
-# Import brand colors — fallback inline if brand module not found yet
 try:
     from src.renderer.brand import (
-        BG, INK, PRIMARY, SECONDARY, DARK, LIGHT, ACCENT, GREY, WHITE,
-        INTRO_FRAMES, INTRO_FPS, LOWER_THIRD_H,
+        PRIMARY, DARK, MID, LEAF, CREAM, LIGHT, BG, ACCENT,
+        INK, GREY, WHITE, INTRO_FRAMES, INTRO_FPS, LOWER_THIRD_H,
     )
 except ImportError:
-    BG        = (250, 255, 248)
-    INK       = (18,  35,  26)
-    PRIMARY   = (45, 106, 79)
-    SECONDARY = (149, 213, 178)
-    DARK      = (27,  67,  50)
-    LIGHT     = (216, 243, 220)
-    ACCENT    = (255, 183,  3)
-    GREY      = (107, 143, 113)
-    WHITE     = (255, 255, 255)
-    INTRO_FRAMES = 42
-    INTRO_FPS    = 12
-    LOWER_THIRD_H = 80
+    PRIMARY = (29, 48, 16); DARK = (29, 51, 11); MID = (81, 117, 18)
+    LEAF = (114, 140, 15); CREAM = (244, 235, 191); LIGHT = (237, 247, 224)
+    BG = (250, 250, 240); ACCENT = (212, 175, 55); INK = (26, 46, 8)
+    GREY = (107, 124, 74); WHITE = (255, 255, 255)
+    INTRO_FRAMES = 42; INTRO_FPS = 12; LOWER_THIRD_H = 80
 
-_FC: dict = {}
-_TA_PATHS = [
-    "/usr/share/fonts/truetype/noto/NotoSansTamil-Black.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf",
-]
-_EN_PATHS = [
-    "/usr/share/fonts/truetype/noto/NotoSans-Black.ttf",
-    "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf",
-]
+_FC = {}
+_TA = ["/usr/share/fonts/truetype/noto/NotoSansTamil-Black.ttf",
+       "/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf"]
+_EN = ["/usr/share/fonts/truetype/noto/NotoSans-Black.ttf",
+       "/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf"]
 
-def _font(script: str, size: int) -> ImageFont.FreeTypeFont:
-    import os
-    k = (script, size)
+def _font(sc, sz):
+    k = (sc, sz)
     if k not in _FC:
-        paths = _TA_PATHS if script == "ta" else _EN_PATHS
-        for p in paths:
+        for p in (_TA if sc=="ta" else _EN):
             if os.path.exists(p):
-                try:
-                    _FC[k] = ImageFont.truetype(p, size)
-                    break
-                except Exception:
-                    continue
-        if k not in _FC:
-            _FC[k] = ImageFont.load_default()
+                try: _FC[k] = ImageFont.truetype(p, sz); break
+                except: pass
+        if k not in _FC: _FC[k] = ImageFont.load_default()
     return _FC[k]
 
-
-def _ease_out(t: float) -> float:
-    """Ease-out cubic."""
-    return 1 - (1 - t) ** 3
-
-
-def _ease_in_out(t: float) -> float:
-    return t * t * (3 - 2 * t)
+def _ab(fg, bg, a): return tuple(int(bg[i]+(fg[i]-bg[i])*a) for i in range(3))
+def _eo(t): return 1-(1-t)**3
+def _eio(t): return t*t*(3-2*t)
 
 
-# ── Intro card ────────────────────────────────────────────────────────
+def _draw_brush_stroke(draw, alpha):
+    """Replicate the dark green brush stroke from the banner left side."""
+    # Jagged brush stroke shape — left portion
+    pts = [(0,0),(320,0),(380,80),(300,180),(360,280),(280,380),
+           (340,480),(260,580),(320,680),(240,780),(300,880),(220,980),(0,1080)]
+    col = _ab(PRIMARY, BG, alpha)
+    draw.polygon(pts, fill=col)
+    # Inner lighter green layer
+    pts2 = [(0,0),(200,0),(240,100),(180,200),(220,320),(160,440),
+            (200,560),(140,680),(180,800),(120,920),(160,1080),(0,1080)]
+    inner = _ab(DARK, BG, alpha*0.7)
+    draw.polygon(pts2, fill=inner)
+
+
+def _draw_leaf_sprout(draw, x, y, size, alpha):
+    """Draw the leaf sprout motif from the channel branding."""
+    # Stem
+    col_stem = _ab(MID, BG, alpha)
+    draw.line([(x, y+size), (x, y+size//3)], fill=col_stem, width=max(3, size//18))
+    # Left leaf
+    col_leaf = _ab(LEAF, BG, alpha)
+    lx, ly = x - size//3, y + size//4
+    draw.ellipse([lx-size//3, ly-size//2, lx+size//6, ly+size//6],
+                 fill=col_leaf, outline=_ab(MID, BG, alpha*0.8), width=2)
+    # Right leaf (bigger, like the banner)
+    rx, ry = x + size//6, y
+    draw.ellipse([rx-size//6, ry-size//2, rx+size//2, ry+size//3],
+                 fill=col_leaf, outline=_ab(MID, BG, alpha*0.8), width=2)
+    # Tip bud
+    draw.ellipse([x-size//8, y-size//4, x+size//8, y+size//8],
+                 fill=_ab(MID, BG, alpha))
+
 
 def render_intro_frames(
-    channel_name_ta: str = "துளிர்",
-    tagline_ta: str = "உண்மையான கதைகள். உண்மையான பாடங்கள்.",
-    handle: str = "@thulir",
-    topic_ta: str = "",
+    channel_name_ta="துளிர்",
+    tagline_ta="துளிர் இன்று… வளர்ச்சி நாளை.",
+    handle="@thulir",
+    topic_ta="",
 ) -> List[np.ndarray]:
-    """Render branded 3.5s intro. Returns list of numpy frames."""
     frames = []
-
     for fi in range(INTRO_FRAMES):
-        progress = fi / max(INTRO_FRAMES - 1, 1)
-
-        # Animation phases
-        # 0.0–0.25: fade + slide in
-        # 0.25–0.80: hold
-        # 0.80–1.0: fade out
-        if progress < 0.25:
-            alpha = _ease_out(progress / 0.25)
-            slide_y = int((1 - _ease_out(progress / 0.25)) * 60)
-        elif progress < 0.80:
-            alpha = 1.0
-            slide_y = 0
+        p = fi / max(INTRO_FRAMES-1, 1)
+        if p < 0.25:
+            alpha = _eo(p/0.25); slide = int((1-_eo(p/0.25))*70)
+        elif p < 0.82:
+            alpha = 1.0; slide = 0
         else:
-            alpha = 1.0 - _ease_in_out((progress - 0.80) / 0.20)
-            slide_y = 0
-
-        frame = _draw_intro_frame(
-            channel_name_ta, tagline_ta, handle, topic_ta,
-            alpha=alpha, slide_y=slide_y
-        )
-        frames.append(np.array(frame.convert("RGB")))
-
+            alpha = 1.0-_eio((p-0.82)/0.18); slide = 0
+        frames.append(np.array(_draw_intro(
+            channel_name_ta, tagline_ta, handle, topic_ta, alpha, slide
+        ).convert("RGB")))
     return frames
 
 
-def _draw_intro_frame(
-    channel_name_ta: str,
-    tagline_ta: str,
-    handle: str,
-    topic_ta: str,
-    alpha: float,
-    slide_y: int,
-) -> Image.Image:
-    img  = Image.new("RGB", (W, H), BG)
+def _draw_intro(name_ta, tagline_ta, handle, topic_ta, alpha, slide):
+    img = Image.new("RGB", (W, H), BG)
+
+    # ── Warm cream gradient background (like banner sky) ─────────
+    import numpy as np_
+    arr = np_.array(img, dtype=np_.float32)
+    for y in range(H):
+        t = y/H
+        # Blend from warm cream at top to light green tint at bottom
+        top = np_.array(CREAM, dtype=np_.float32)
+        bot = np_.array(LIGHT, dtype=np_.float32)
+        arr[y] = top*(1-t) + bot*t
+    img = Image.fromarray(arr.clip(0,255).astype(np_.uint8))
+
     draw = ImageDraw.Draw(img)
 
-    # ── Green gradient wash at bottom ──────────────────────────────
-    for y in range(H - 200, H):
-        t = (y - (H - 200)) / 200
-        r = int(BG[0] * (1 - t) + LIGHT[0] * t)
-        g = int(BG[1] * (1 - t) + LIGHT[1] * t)
-        b = int(BG[2] * (1 - t) + LIGHT[2] * t)
-        draw.line([(0, y), (W, y)], fill=(r, g, b))
+    # ── Dark green brush stroke LEFT ──────────────────────────────
+    _draw_brush_stroke(draw, alpha)
 
-    # ── Thin green top accent line ──────────────────────────────────
-    for i in range(6):
-        shade = tuple(max(0, c - i * 8) for c in PRIMARY)
-        draw.line([(0, i), (W, i)], fill=shade)
+    # ── Leaf sprout TOP RIGHT ─────────────────────────────────────
+    sprout_x = int(W * 0.82)
+    sprout_y = int(H * 0.15) + slide
+    _draw_leaf_sprout(draw, sprout_x, sprout_y, 220, alpha)
 
-    # ── Decorative green circle (left) ─────────────────────────────
-    circle_x = W // 4
-    circle_y = H // 2 + slide_y
-    circle_r = 320
-    for dr in range(circle_r, circle_r - 12, -1):
-        t = (circle_r - dr) / 12
-        col = tuple(int(LIGHT[c] + (BG[c] - LIGHT[c]) * t) for c in range(3))
-        draw.ellipse([circle_x - dr, circle_y - dr, circle_x + dr, circle_y + dr],
-                     fill=col)
+    # ── Thin horizontal rule ──────────────────────────────────────
+    rule_y = H//2 + 120 + slide
+    rule_col = _ab(MID, CREAM, alpha*0.4)
+    draw.line([(420, rule_y), (W-120, rule_y)], fill=rule_col, width=3)
 
-    # ── Vertical green accent bar (left edge of text zone) ─────────
-    bar_x = W // 2 - 20
-    draw.rectangle([bar_x, H // 2 - 160 + slide_y,
-                    bar_x + 8, H // 2 + 120 + slide_y], fill=PRIMARY)
-
-    # ── Channel name ────────────────────────────────────────────────
-    name_size = 180
-    name_font = _font("ta", name_size)
-    name_bbox = draw.textbbox((0, 0), channel_name_ta, font=name_font)
-    name_w = name_bbox[2] - name_bbox[0]
-    name_x = (W - name_w) // 2
-    name_y = H // 2 - 180 + slide_y
-
+    # ── Channel name "துளிர்" ─────────────────────────────────────
+    name_sz = 200
+    nf = _font("ta", name_sz)
+    nb = draw.textbbox((0,0), name_ta, font=nf)
+    nw = nb[2]-nb[0]
+    nx = 420
+    ny = H//2 - 190 + slide
     # Shadow
-    if alpha > 0.1:
-        shadow_col = tuple(max(0, c - 30) for c in LIGHT)
-        draw.text((name_x + 4, name_y + 4), channel_name_ta, font=name_font, fill=shadow_col)
-    # Main text
-    col = _alpha_blend(PRIMARY, BG, alpha)
-    draw.text((name_x, name_y), channel_name_ta, font=name_font, fill=col)
+    shadow = _ab(DARK, CREAM, alpha*0.25)
+    draw.text((nx+5, ny+5), name_ta, font=nf, fill=shadow)
+    # Main
+    col = _ab(DARK, CREAM, alpha)
+    draw.text((nx, ny), name_ta, font=nf, fill=col)
 
-    # ── Tagline ─────────────────────────────────────────────────────
-    tag_size = 52
-    tag_font = _font("ta", tag_size)
-    tag_bbox = draw.textbbox((0, 0), tagline_ta, font=tag_font)
-    tag_w = tag_bbox[2] - tag_bbox[0]
-    tag_x = (W - tag_w) // 2
-    tag_y = name_y + name_bbox[3] - name_bbox[1] + 24 + slide_y
-    col_tag = _alpha_blend(GREY, BG, alpha)
-    draw.text((tag_x, tag_y), tagline_ta, font=tag_font, fill=col_tag)
+    # ── Tagline ───────────────────────────────────────────────────
+    tag_sz = 54
+    tf = _font("ta", tag_sz)
+    tb = draw.textbbox((0,0), tagline_ta, font=tf)
+    tw = tb[2]-tb[0]
+    ty = ny + (nb[3]-nb[1]) + 28 + slide
+    col_tag = _ab(MID, CREAM, alpha)
+    draw.text((nx, ty), tagline_ta, font=tf, fill=col_tag)
 
-    # ── Topic teaser (if provided) ──────────────────────────────────
+    # ── Topic teaser ──────────────────────────────────────────────
     if topic_ta:
-        tease_size = 44
-        tease_font = _font("ta", tease_size)
-        tease_text = f"இன்றைய கதை: {topic_ta[:40]}"
-        tease_bbox = draw.textbbox((0, 0), tease_text, font=tease_font)
-        tease_w = tease_bbox[2] - tease_bbox[0]
-        tease_x = (W - tease_w) // 2
-        tease_y = tag_y + 80 + slide_y
-        col_tease = _alpha_blend(DARK, BG, alpha * 0.85)
-        draw.text((tease_x, tease_y), tease_text, font=tease_font, fill=col_tease)
+        tease_sz = 42
+        tease_f = _font("ta", tease_sz)
+        tease = f"இன்றைய கதை: {topic_ta[:38]}"
+        t2y = ty + (tb[3]-tb[1]) + 30 + slide
+        col_t = _ab(INK, CREAM, alpha*0.75)
+        draw.text((nx, t2y), tease, font=tease_f, fill=col_t)
 
-    # ── Bottom strip ─────────────────────────────────────────────────
-    strip_y = H - 80
-    strip_alpha = _alpha_blend(PRIMARY, BG, alpha)
-    draw.rectangle([0, strip_y, W, H], fill=strip_alpha)
+    # ── Bottom strip (dark green like banner left) ────────────────
+    strip_y = H - 88
+    strip_col = _ab(PRIMARY, BG, alpha)
+    draw.rectangle([0, strip_y, W, H], fill=strip_col)
+    # Gold left accent bar
+    draw.rectangle([0, strip_y, 8, H], fill=_ab(ACCENT, PRIMARY, alpha))
+    # Handle text
+    hf = _font("en", 40)
+    hb = draw.textbbox((0,0), handle, font=hf)
+    hx = (W - (hb[2]-hb[0])) // 2
+    col_h = _ab(WHITE, PRIMARY, alpha)
+    draw.text((hx, strip_y+22), handle, font=hf, fill=col_h)
 
-    # Handle text in strip
-    handle_font = _font("en", 38)
-    handle_bbox = draw.textbbox((0, 0), handle, font=handle_font)
-    handle_w = handle_bbox[2] - handle_bbox[0]
-    draw.text(
-        ((W - handle_w) // 2, strip_y + 20),
-        handle, font=handle_font, fill=WHITE
-    )
-
-    # ── Green dot pattern (subtle texture) ─────────────────────────
-    import random
-    rng = random.Random(42)
-    for _ in range(20):
-        dx = rng.randint(50, W - 50)
-        dy = rng.randint(50, H - 150)
-        dr = rng.randint(3, 8)
-        dot_col = _alpha_blend(SECONDARY, BG, alpha * 0.3)
-        draw.ellipse([dx - dr, dy - dr, dx + dr, dy + dr], fill=dot_col)
-
+    # Soft vignette blur on edges
+    img = img.filter(ImageFilter.SMOOTH_MORE)
     return img
 
 
-def _alpha_blend(fg: tuple, bg: tuple, alpha: float) -> tuple:
-    return tuple(int(bg[i] + (fg[i] - bg[i]) * alpha) for i in range(3))
+# ── Lower-third name card ─────────────────────────────────────────────
 
-
-# ── Lower third name card ─────────────────────────────────────────────
-
-def render_lower_third(
-    frame: Image.Image,
-    protagonist: str,
-    subtitle: str,
-    beat_frame: int,
-    total_beat_frames: int,
-    fps: int = 12,
-) -> Image.Image:
-    """Overlay a branded lower-third onto an existing frame.
-
-    Shows for first 4 seconds of each beat (except hook — shown longer).
-    Slides up from bottom, fades out after 3s.
-    """
-    visible_frames = min(fps * 4, total_beat_frames - fps)
-    if beat_frame > visible_frames or not protagonist:
+def render_lower_third(frame, protagonist, subtitle, beat_frame,
+                       total_beat_frames, fps=12):
+    visible = min(fps*4, total_beat_frames-fps)
+    if beat_frame > visible or not protagonist:
         return frame
-
-    # Animation
-    if beat_frame < fps * 0.4:
-        t = beat_frame / (fps * 0.4)
-        alpha = _ease_out(t)
-        slide = int((1 - _ease_out(t)) * 40)
-    elif beat_frame < visible_frames - fps * 0.5:
-        alpha = 1.0
-        slide = 0
+    if beat_frame < fps*0.4:
+        a = _eo(beat_frame/(fps*0.4)); slide=int((1-_eo(beat_frame/(fps*0.4)))*35)
+    elif beat_frame < visible - fps*0.5:
+        a = 1.0; slide=0
     else:
-        remain = visible_frames - beat_frame
-        alpha = remain / (fps * 0.5)
-        slide = 0
-
-    if alpha < 0.05:
-        return frame
-
-    overlay = frame.copy()
-    draw = ImageDraw.Draw(overlay)
-
-    # Strip background
-    strip_y = H - LOWER_THIRD_H - 20 + slide
-    strip_col = _alpha_blend(PRIMARY, (0, 0, 0), 0.88)
-    draw.rectangle([0, strip_y, W, strip_y + LOWER_THIRD_H], fill=strip_col)
-
-    # Left accent bar
-    draw.rectangle([0, strip_y, 6, strip_y + LOWER_THIRD_H], fill=ACCENT)
-
-    # Protagonist name
-    name_font = _font("en" if protagonist.isascii() else "ta", 42)
-    draw.text((30, strip_y + 10), protagonist, font=name_font, fill=WHITE)
-
-    # Subtitle (role/context)
+        a = max(0,(visible-beat_frame)/(fps*0.5)); slide=0
+    if a < 0.05: return frame
+    ov = frame.copy(); draw = ImageDraw.Draw(ov)
+    sy = H - LOWER_THIRD_H - 20 + slide
+    # Strip
+    sc = _ab(PRIMARY, (0,0,0), 0.92)
+    draw.rectangle([0, sy, W, sy+LOWER_THIRD_H], fill=sc)
+    # Gold bar
+    draw.rectangle([0, sy, 7, sy+LOWER_THIRD_H], fill=ACCENT)
+    # Name
+    sc2 = "en" if protagonist.isascii() else "ta"
+    nf2 = _font(sc2, 44)
+    draw.text((28, sy+10), protagonist, font=nf2, fill=WHITE)
+    # Subtitle
     if subtitle:
-        sub_font = _font("en" if subtitle.isascii() else "ta", 30)
-        sub_bbox = draw.textbbox((0, 0), protagonist, font=name_font)
-        sub_x = 30 + sub_bbox[2] + 20
-        draw.text((sub_x, strip_y + 22), f"• {subtitle}", font=sub_font,
-                  fill=_alpha_blend(SECONDARY, PRIMARY, 0.8))
-
-    # Blend with original
-    blended = Image.blend(frame, overlay, alpha)
-    return blended
+        sf = _font("en" if subtitle.isascii() else "ta", 30)
+        sb = draw.textbbox((0,0), protagonist, font=nf2)
+        sx2 = 28+(sb[2]-sb[0])+18
+        draw.text((sx2, sy+22), f"• {subtitle}", font=sf,
+                  fill=_ab(LEAF, PRIMARY, 0.9))
+    from PIL import Image as PILImage
+    return PILImage.blend(frame, ov, a)
 
 
-# ── Green theme frame tint ────────────────────────────────────────────
-
-def apply_green_tint(frame: Image.Image, strength: float = 0.04) -> Image.Image:
-    """Apply a very subtle green tint to every frame for visual consistency."""
-    if strength <= 0:
-        return frame
-    overlay = Image.new("RGB", frame.size, LIGHT)
-    return Image.blend(frame, overlay, strength)
+def apply_green_tint(frame, strength=0.035):
+    """Subtle warm-cream tint matching brand background."""
+    ov = Image.new("RGB", frame.size, CREAM)
+    return Image.blend(frame, ov, strength)
