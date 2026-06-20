@@ -234,13 +234,13 @@ def render_frame(
 
     # ── Left: word-by-word text ───────────────────────────────────────
     if not all_words:
-        # Apply subtle green brand tint
-    try:
-        from src.renderer.intro_renderer import apply_green_tint
-        frame = apply_green_tint(frame, strength=0.04)
-    except ImportError:
-        pass
-    return _apply_ken_burns(frame, scene_progress)
+        # Apply subtle green brand tint then return
+        try:
+            from src.renderer.intro_renderer import apply_green_tint
+            frame = apply_green_tint(frame, strength=0.04)
+        except ImportError:
+            pass
+        return _apply_ken_burns(frame, scene_progress)
 
     words_to_show = all_words[:visible]
     max_h = H - TEXT_TOP - 120
@@ -292,6 +292,12 @@ def render_frame(
                             x + 10, y_start - lh + ch_h], fill=INK)
 
     # ── Ken Burns zoom ────────────────────────────────────────────────
+    # Apply subtle green brand tint to every frame
+    try:
+        from src.renderer.intro_renderer import apply_green_tint
+        frame = apply_green_tint(frame, strength=0.04)
+    except ImportError:
+        pass
     return _apply_ken_burns(frame, scene_progress)
 
 
