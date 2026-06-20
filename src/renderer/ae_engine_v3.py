@@ -19,6 +19,15 @@ from typing import List, Optional
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+try:
+    from src.renderer.effects_engine import (
+        apply_stop_motion_effects,
+        apply_flipbook_transition,
+    )
+    _EFFECTS_AVAILABLE = True
+except ImportError:
+    _EFFECTS_AVAILABLE = False
+
 W, H = 1920, 1080
 
 # Layout constants
@@ -326,7 +335,22 @@ def render_scene_frames(
             scene_progress = progress,
             word_pop_frame = word_pop_frame,
         )
-        frames.append(np.array(pil.convert("RGB")))
+        frame_arr = np.array(pil.convert("RGB"))
+
+        # Stop-motion effects stack
+        if _EFFECTS_AVAILABLE:
+            frame_arr = apply_stop_motion_effects(
+                frame          = frame_arr,
+                frame_index    = fi,
+                scene_index    = 0,
+                scene_progress = progress,
+                word_just_appeared = (visible > prev_visible),
+                word_age_frames    = word_pop_frame,
+                # Chalk exit in last 8% of scene
+                exit_progress  = max(0.0, (progress - 0.92) / 0.08),
+                enable_chalk_exit = (progress > 0.92),
+            )
+        frames.append(frame_arr)
 
     return frames
 
@@ -335,16 +359,23 @@ def render_transition(
     frame_a: np.ndarray,
     frame_b: np.ndarray,
     t:       float,
-    style:   str = "cut",
+    style:   str = "flipbook",
 ) -> np.ndarray:
-    """Transition between scenes. AE uses hard cuts or quick wipes."""
-    if style == "cut" or t >= 0.5:
+    """Transitions between scenes.
+    flipbook: vertical page-peel (default) — most physical/real feel
+    wipe:     horizontal sweep
+    cut:      instant
+    dissolve: crossfade
+    """
+    if style == "cut" or t >= 1.0:
         return frame_b
+    if style == "flipbook" and _EFFECTS_AVAILABLE:
+        return apply_flipbook_transition(frame_a, frame_b, t)
     if style == "wipe":
         w = frame_a.shape[1]
-        split = int(w * t * 2)
+        split = int(w * t)
         out = frame_a.copy()
         out[:, :split] = frame_b[:, :split]
         return out
-    # Fast dissolve (0.3s)
-    return (frame_a * (1 - t * 2) + frame_b * (t * 2)).clip(0, 255).astype(np.uint8)
+    # Dissolve
+    return (frame_a * (1 - t) + frame_b * t).clip(0, 255).astype(np.uint8)
