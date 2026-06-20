@@ -69,13 +69,15 @@ _FC = {}
 
 def _f(k, s):
     if (k, s) not in _FC:
+        script = "ta" if k in ("ta", "ta_reg") else "en"
+        paths = _TAMIL_FONT_PATHS if script == "ta" else _LATIN_FONT_PATHS
+        path = _resolve_font_path(paths)
         try:
-            from src.core.font_resolver import load_font
-            script = "ta" if k in ("ta", "ta_reg") else "en"
-            _FC[(k, s)] = load_font(s, script=script)
+            _FC[(k, s)] = ImageFont.truetype(path, s)
         except Exception:
             try:
-                _FC[(k, s)] = ImageFont.truetype(FONT_PATHS.get(k, FONT_PATHS["ta"]), s)
+                from src.core.font_resolver import load_font
+                _FC[(k, s)] = load_font(s, script=script)
             except Exception:
                 _FC[(k, s)] = ImageFont.load_default()
     return _FC[(k, s)]
