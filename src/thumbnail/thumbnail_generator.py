@@ -137,7 +137,7 @@ def _make_gradient_bg(w, h, top_color, bottom_color) -> Image.Image:
 def _apply_cinematic_grade(img: Image.Image, emotion: str) -> Image.Image:
     """Color grade the portrait for cinematic look."""
     img = ImageEnhance.Contrast(img).enhance(1.3)
-    img = ImageEnhance.Saturation(img).enhance(1.15)
+    img = ImageEnhance.Color(img).enhance(1.15)  # PIL uses Color not Saturation
     img = ImageEnhance.Brightness(img).enhance(0.88)
     # Slight green tint for brand consistency
     arr = np.array(img, dtype=np.float32)
