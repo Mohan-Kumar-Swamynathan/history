@@ -87,35 +87,49 @@ def _num_to_ta(n: int) -> str:
 
 
 def preprocess_tts_text(text: str) -> str:
-    """Clean mixed Tamil+English text for better TTS pronunciation.
+    """Clean text for TTS — fix hyphens, numbers, English mixing.
 
-    Steps:
-    1. Replace known English proper nouns with Tamil phonetics
-    2. Spell out standalone small numbers (2-99) in Tamil
-    3. Normalise punctuation for natural pauses
+    Critical fixes:
+    1. "1950-ல்" → "1950 ஆம் ஆண்டில்" (hyphen before Tamil suffix)
+    2. "65-வது" → "அறுபத்தி ஐந்தாவது"
+    3. Replace known English proper nouns with Tamil phonetics
+    4. Spell out small numbers in Tamil
     """
-    # Step 1: known substitutions
+    # Fix 0: year-Tamil suffix patterns (most common robotic sound)
+    # "1950-ல்" → "1950 ஆம் ஆண்டில்"
+    text = re.sub(r'(\d{4})-ல்', r'\1 ஆம் ஆண்டில்', text)
+    text = re.sub(r'(\d{4})-இல்', r'\1 ஆம் ஆண்டில்', text)
+    text = re.sub(r'(\d{4})-ம்', r'\1 ஆம்', text)
+    # "65-வது" → ordinal in Tamil
+    text = re.sub(r'(\d+)-வது', lambda m: _num_to_ta(int(m.group(1))) + 'வது', text)
+    text = re.sub(r'(\d+)-ஆவது', lambda m: _num_to_ta(int(m.group(1))) + ' ஆவது', text)
+    # General: remove hyphen between number and Tamil suffix
+    text = re.sub(r'(\d+)-([\u0B80-\u0BFF])', r'\1 \2', text)
+
+    # Fix 1: known English → Tamil substitutions
     for pattern, replacement in _EN_TO_TA:
         text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
 
-    # Step 2: standalone numbers 2–99 → Tamil words
-    # (1 is usually part of year/code so skip; large numbers keep digits)
+    # Fix 2: standalone numbers → Tamil words
     def _replace_number(m: re.Match) -> str:
         n = int(m.group())
-        if 2 <= n <= 99:
+        if 2 <= n <= 999:
             return _num_to_ta(n)
         return m.group()
+    text = re.sub(r'(?<!\d)\b([2-9]\d{0,2})\b(?!\d)', _replace_number, text)
 
-    text = re.sub(r"(?<!\d)\b([2-9]\d?)\b(?!\d)", _replace_number, text)
+    # Fix 3: remove remaining English words not in substitution list
+    # Replace with Tamil transliteration hint or remove
+    def _handle_english(m: re.Match) -> str:
+        word = m.group()
+        if len(word) <= 3: return word  # short codes OK
+        return word  # keep — TTS will attempt it
+    text = re.sub(r'\b[A-Za-z]{4,}\b', _handle_english, text)
 
-    # Step 3: normalise sentence boundaries for natural rhythm
-    text = re.sub(r"\.\s+", ". ", text)
-    text = re.sub(r"!\s+", "! ", text)
-    text = re.sub(r"\?\s+", "? ", text)
-
-    # Step 4: remove residual ASCII-only words (leftover English not in dict)
-    # Replace with a soft pause marker rather than garbled pronunciation
-    text = re.sub(r"\b[A-Za-z]{4,}\b", lambda m: m.group() if _is_known_english(m.group()) else m.group(), text)
+    # Fix 4: normalise punctuation
+    text = re.sub(r'\.\s+', '. ', text)
+    text = re.sub(r'!\s+', '! ', text)
+    text = re.sub(r'\?\s+', '? ', text)
 
     return text.strip()
 
