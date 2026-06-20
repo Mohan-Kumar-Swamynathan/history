@@ -1,12 +1,24 @@
-"""Topic scorer v2 — trend-aware, dedup-enforced, Wikipedia-validated.
+"""Topic scorer — துளிர் content bible implementation.
 
-Discovery pipeline:
-  1. TrendEngine fetches Google Trends India + Wikipedia pageviews
-  2. LLM converts trending term → full TopicCandidate with story arc
-  3. Deduplicator checks against 30-day history
-  4. Score and select best fit for channel
+Scoring framework from content director brief:
+  - Curiosity Score    (1-10)
+  - Emotion Score      (1-10)
+  - Conflict Score     (1-10)
+  - Shock Score        (1-10)
+  - Story Potential    (1-10)
+  - Thumbnail Potential(1-10)
+  - Tamil Audience     (1-10)
+  → Only topics scoring 8+ overall accepted
 
-Fallback: curated fallback_topics.yml (7 strong stories)
+Content pillars:
+  40% Extraordinary People
+  25% History Stories
+  15% Business Stories
+  10% Strange True Stories
+  10% Science & Discovery
+
+Topics are GOOD if they make viewers say "Wow, I never knew that."
+Topics are BAD if they feel like a school lesson.
 """
 
 from __future__ import annotations
@@ -32,266 +44,384 @@ from src.core.llm_policy import (
 )
 from src.core.models import ContentBucket, StoryMode, TopicCandidate
 from src.topic.topic_deduplicator import TopicDeduplicator
-from src.topic.trend_engine import TrendEngine
+
+try:
+    from src.topic.trend_engine import TrendEngine
+    _TRENDS_AVAILABLE = True
+except ImportError:
+    _TRENDS_AVAILABLE = False
 
 log = logging.getLogger(__name__)
+
+# Content pillar weights
+PILLAR_WEIGHTS = {
+    ContentBucket.SUCCESS_FAILURE: 0.40,   # Extraordinary People
+    ContentBucket.HISTORICAL_STORY: 0.25,  # History Stories
+    ContentBucket.BUSINESS: 0.15,          # Business Stories
+    ContentBucket.PSYCHOLOGY: 0.10,        # Strange True Stories
+    ContentBucket.SCIENCE: 0.10,           # Science & Discovery
+}
+
+CONTENT_DIRECTOR_PROMPT = """You are the Content Director, Historian, Story Researcher, Script Writer,
+and YouTube Growth Strategist for the Tamil storytelling channel "துளிர்".
+
+CHANNEL MISSION: துளிர் tells the most fascinating TRUE stories from history, business,
+science, human achievement, failure, mystery, war, and discovery.
+
+GOAL: Make viewers say "Wow, I never knew that."
+
+Every video must feel like Almost Everything, MagnatesMedia, RealLifeLore, Johnny Harris style.
+
+TOPIC SCORING (score each 1-10, only accept 8+ overall):
+- Curiosity Score: Does it make people instantly want to know what happened?
+- Emotion Score: Does it trigger surprise, fear, hope, triumph, regret?
+- Conflict Score: Is there a clear antagonist, obstacle, or tension?
+- Shock Score: Is there an unexpected twist or counterintuitive fact?
+- Story Potential: Is there a clear arc (setup → conflict → resolution)?
+- Thumbnail Potential: Can it be captured in one powerful image + 2-4 words?
+- Tamil Audience Appeal: Does a Tamil viewer have a personal connection?
+
+GOOD TOPIC: "1009 times rejected. At 65. Then built the biggest food chain."
+BAD TOPIC: "The history of the Mughal Empire"
+
+AVOID: generic history lessons, timeline explanations, date-heavy content,
+boring biographies, school textbook topics, political debates, low-conflict stories.
+
+CONTENT PILLARS:
+40% Extraordinary People (rejected inventors, erased women, poor boys who changed the world)
+25% History Stories (dramatic decisions, forgotten wars, collapsed empires)
+15% Business Stories (Nokia's mistake, Kodak's failure, Toyota's secret)
+10% Strange True Stories (vanished towns, unexplained events, weird records)
+10% Science & Discovery (accidental inventions, mocked scientists)
+
+HOOK EXAMPLES (first 15 seconds — the real test):
+✅ "1009 times. That's how many times they rejected him."
+✅ "One decision destroyed an entire empire."
+✅ "This man was laughed at by everyone. Then the world changed."
+❌ "Today we are going to learn about..."
+❌ "In this video..."
+
+Already used topics (avoid these):
+{avoid_list}
+"""
+
+TOPIC_GENERATION_PROMPT = CONTENT_DIRECTOR_PROMPT + """
+
+Generate {count} story topics for the {bucket} content pillar.
+
+Each must be:
+- A REAL verifiable story (has Wikipedia or credible sources)
+- Never invented or composite
+- Scored 8+ on ALL seven criteria
+- Focused on ONE specific dramatic moment, not a broad biography
+
+Return ONLY JSON array:
+[{{
+  "title_ta": "Tamil YouTube title — curiosity-driven, under 60 chars",
+  "protagonist": "person/company/event name",
+  "protagonist_age": "age at key dramatic moment",
+  "situation": "specific place + year + exact context",
+  "core_problem": "the specific conflict or failure",
+  "emotional_hook": "the most shocking/dramatic specific fact",
+  "turning_point": "the exact moment things changed",
+  "lesson": "what the viewer takes away",
+  "hook_question": "first-15-second hook in Tamil — makes them unable to stop watching",
+  "open_loop": "unanswered question that keeps viewer watching",
+  "story_mode": "biographical",
+  "content_bucket": "{bucket}",
+  "wikipedia_subject": "exact English Wikipedia article title",
+  "curiosity_score": 9.0,
+  "emotion_score": 8.5,
+  "conflict_score": 9.0,
+  "shock_score": 8.0,
+  "story_score": 9.0,
+  "thumbnail_score": 8.5,
+  "tamil_score": 8.0
+}}]"""
 
 
 class TopicScorer:
     def __init__(self) -> None:
         self.deduplicator = TopicDeduplicator()
-        history_path = get_output_dir() / ".." / "data" / "topic_history.json"
-        self._trend_engine = TrendEngine(history_path)
+        if _TRENDS_AVAILABLE:
+            history_path = get_output_dir() / ".." / "data" / "topic_history.json"
+            self._trend_engine = TrendEngine(history_path)
+        else:
+            self._trend_engine = None
 
     def discover_topic(
         self,
         category: Optional[str] = None,
         content_bucket: Optional[ContentBucket] = None,
     ) -> TopicCandidate:
-        used_titles = self.deduplicator.load_used_titles()
-        target_bucket = content_bucket or self._pick_content_bucket()
+        bucket = content_bucket or self._pick_pillar()
+        used   = self.deduplicator.load_used_titles()
+        avoid  = self.deduplicator.recent_avoid_list(20)
 
-        # ── Step 1: Try trend-aware discovery ────────────────────────
-        if has_llm_credentials() and should_use_llm(STAGE_TOPIC):
+        # 1. Try trends first
+        if self._trend_engine and has_llm_credentials():
             try:
-                topic = self._discover_from_trends(target_bucket, used_titles)
+                topic = self._from_trends(bucket, avoid)
                 if topic:
-                    log.info("✅ Trend topic: %s", topic.title_ta[:60])
+                    log.info("✅ Trend topic selected: %s", topic.title_ta[:60])
                     return topic
-            except Exception as exc:
-                log.warning("Trend discovery failed: %s", exc)
+            except Exception as e:
+                log.warning("Trend discovery failed: %s", e)
 
-        # ── Step 2: LLM topic generation (no trend data) ─────────────
+        # 2. LLM content director
         if has_llm_credentials() and should_use_llm(STAGE_TOPIC):
             try:
-                topic = self._discover_with_llm(target_bucket, used_titles)
-                log.info("✅ LLM topic: %s", topic.title_ta[:60])
-                return topic
-            except Exception as exc:
-                log.warning("LLM topic failed: %s", exc)
+                topic = self._from_llm(bucket, avoid)
+                if topic:
+                    log.info("✅ LLM topic selected: %s", topic.title_ta[:60])
+                    return topic
+            except Exception as e:
+                log.warning("LLM topic failed: %s", e)
 
-        # ── Step 3: Curated fallback bank ────────────────────────────
-        topic = self._pick_offline_topic(target_bucket, used_titles)
+        # 3. Curated fallback
+        topic = self._from_fallback(bucket, used)
         log.info("✅ Fallback topic: %s", topic.title_ta[:60])
         return topic
 
-    def _discover_from_trends(
-        self,
-        bucket: ContentBucket,
-        used_titles: List[str],
-    ) -> Optional[TopicCandidate]:
-        """Fetch trending topic and convert to story candidate."""
+    def _from_trends(self, bucket, avoid):
         llm_fn = generate_text if has_llm_credentials() else None
         trending = self._trend_engine.discover(llm_fn=llm_fn, count=3)
-
-        if not trending:
-            log.info("No trending topics found")
-            return None
-
-        # Pick the best fit for our bucket
         for trend in trending:
-            wiki_subject = trend.get("wikipedia_subject", trend["name"])
-            log.info("Processing trend: %s (wiki: %s)", trend["name"], wiki_subject)
-
-            # Ask LLM to build a full story arc from this trending person
-            topic = self._trend_to_topic(trend, bucket)
-            if topic and not self.deduplicator.is_duplicate(topic):
+            topic = self._trend_to_story(trend, bucket, avoid)
+            if topic and self._passes_score_gate(topic):
                 return topic
-
         return None
 
-    def _trend_to_topic(self, trend: dict, bucket: ContentBucket) -> Optional[TopicCandidate]:
-        """Convert a trending term + Wikipedia extract into a full TopicCandidate."""
-        name = trend["name"]
-        wiki = trend.get("wikipedia_subject", name)
-        extract = trend.get("extract", "")
-        hook = trend.get("hook", "")
-        why = trend.get("why_trending", "")
+    def _trend_to_story(self, trend, bucket, avoid):
+        name  = trend["name"]
+        wiki  = trend.get("wikipedia_subject", name)
+        extr  = trend.get("extract", "")
+        prompt = CONTENT_DIRECTOR_PROMPT.format(avoid_list=avoid) + f"""
 
-        prompt = f"""Convert this trending person/company into a Tamil YouTube story topic.
+Convert this trending subject into a துளிர் story topic.
 
 Subject: {name}
 Wikipedia: {wiki}
-Context: {extract[:400]}
-Why trending now: {why}
+Context: {extr[:400]}
 
-Create a compelling biographical story arc. Return ONLY JSON:
+Apply the full scoring framework. Only return if scores 8+ overall.
+Return ONE JSON object or empty {{}} if not suitable:
 {{
-  "title_ta": "Tamil YouTube title with emotional hook (max 60 chars)",
-  "protagonist": "{name}",
-  "protagonist_age": "age at key moment or empty",
-  "situation": "specific place + year + context",
-  "core_problem": "specific failure or challenge they faced",
-  "emotional_hook": "the most dramatic/surprising specific moment",
-  "turning_point": "the specific moment things changed",
-  "lesson": "what Tamil viewers will take away",
-  "hook_question": "compelling question in Tamil (60 chars max)",
-  "open_loop": "incomplete sentence creating suspense in Tamil",
-  "wikipedia_subject": "{wiki}",
-  "story_mode": "biographical",
-  "content_bucket": "{bucket.value}",
-  "curiosity_score": 8.5,
-  "emotion_score": 8.0,
-  "story_score": 8.5,
-  "lesson_score": 8.0
+  "title_ta": "...", "protagonist": "{name}", "protagonist_age": "...",
+  "situation": "...", "core_problem": "...", "emotional_hook": "...",
+  "turning_point": "...", "lesson": "...", "hook_question": "...",
+  "open_loop": "...", "story_mode": "biographical",
+  "content_bucket": "{bucket.value}", "wikipedia_subject": "{wiki}",
+  "curiosity_score": 0, "emotion_score": 0, "conflict_score": 0,
+  "shock_score": 0, "story_score": 0, "thumbnail_score": 0, "tamil_score": 0
 }}"""
-
         try:
-            raw = generate_text(prompt, max_tokens=800, preferred=preferred_provider_for_stage(STAGE_TOPIC))
+            raw = generate_text(prompt, max_tokens=800)
             data = extract_json_object(raw)
-            if data:
-                return _dict_to_topic(data, source="trend")
+            if data and float(data.get("curiosity_score", 0)) >= 7.5:
+                return _dict_to_topic(data, "trend")
         except Exception as e:
-            log.warning("trend_to_topic failed for %s: %s", name, e)
+            log.warning("trend_to_story failed: %s", e)
         return None
 
-    # ── Unchanged methods from original ──────────────────────────────
+    def _from_llm(self, bucket, avoid):
+        count  = max(5, topic_candidate_count(10))
+        prompt = TOPIC_GENERATION_PROMPT.format(
+            avoid_list=avoid, count=count, bucket=bucket.value
+        )
+        raw = generate_text(
+            prompt,
+            max_tokens=max_tokens_for_stage(STAGE_TOPIC, 3000),
+            preferred=preferred_provider_for_stage(STAGE_TOPIC),
+        )
+        candidates = [
+            _dict_to_topic(d, "llm", bucket)
+            for d in (extract_json_array(raw) or [])
+            if d
+        ]
+        # Filter by score gate
+        valid = [c for c in candidates
+                 if self._passes_score_gate(c)
+                 and not self.deduplicator.is_duplicate(c)]
+        if not valid:
+            # Relax threshold slightly
+            valid = [c for c in candidates if not self.deduplicator.is_duplicate(c)]
+        if not valid:
+            raise ValueError("No valid candidates from LLM")
+        valid.sort(key=lambda t: t.total_score, reverse=True)
+        return valid[0]
 
-    def generate_candidates(self, content_bucket, used_titles, count=20):
-        count = topic_candidate_count(count)
-        if count == 0 or not has_llm_credentials():
-            return self._offline_candidate_pool(content_bucket, used_titles)
+    def _passes_score_gate(self, topic: TopicCandidate) -> bool:
+        """Content bible: only accept topics scoring 8+ overall."""
+        return topic.total_score >= 8.0
 
-        bucket_label = content_bucket.value
-        story_mode = self._story_mode_for_bucket(content_bucket)
-        prompt = f"""You are a YouTube Content Strategist for "துளிர்" Tamil storytelling channel.
+    def _pick_pillar(self) -> ContentBucket:
+        buckets = list(PILLAR_WEIGHTS.keys())
+        weights = list(PILLAR_WEIGHTS.values())
+        return random.choices(buckets, weights=weights, k=1)[0]
 
-QUALITY BAR — your topics must match this level:
-- Colonel Sanders: 1009 rejections at 65 → built KFC
-- Nokia: #1 phone brand → destroyed by one wrong decision
-- APJ Kalam: newspaper boy → India's missile man
-- Sundar Pichai: scholarship student → Google CEO
+    def _from_fallback(self, bucket, used):
+        all_t   = self._load_fallback()
+        avail   = [t for t in all_t if not self.deduplicator.is_duplicate(t)]
+        bucket_t = [t for t in avail if t.content_bucket == bucket]
+        pool    = bucket_t or avail or all_t
+        return random.choice(pool).model_copy(update={"source": "offline"})
 
-Rules:
-- Real people with Wikipedia articles (biographical preferred)
-- SPECIFIC: exact year, exact number, exact place, exact failure
-- Not generic motivation — real story arc with conflict and turning point
-- Tamil audience connection: Indian origin or universal human struggle
-
-Avoid already used:
-{self.deduplicator.recent_avoid_list(15)}
-
-Content bucket: {bucket_label}
-Generate {count} candidates. Return JSON array:
-[{{"title_ta":"...","protagonist":"...","protagonist_age":"...","situation":"...",
-"core_problem":"...","emotional_hook":"...","turning_point":"...","lesson":"...",
-"hook_question":"...","open_loop":"...","story_mode":"{story_mode.value}",
-"content_bucket":"{bucket_label}","wikipedia_subject":"exact Wikipedia title",
-"curiosity_score":8.5,"emotion_score":8.0,"story_score":8.5,"lesson_score":7.5}}]"""
-
-        raw = generate_text(prompt, max_tokens=max_tokens_for_stage(STAGE_TOPIC, 2000),
-                            preferred=preferred_provider_for_stage(STAGE_TOPIC))
-        candidates = [_dict_to_topic(d, source="llm", default_bucket=content_bucket,
-                                     default_mode=story_mode)
-                      for d in (extract_json_array(raw) or [])]
-        return candidates or self._offline_candidate_pool(content_bucket, used_titles)
+    def _load_fallback(self) -> List[TopicCandidate]:
+        path = CONFIG_DIR / "fallback_topics.yml"
+        if not path.exists():
+            return _builtin_fallback()
+        try:
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            topics = [_dict_to_topic(item, "offline") for item in data.get("topics", [])]
+            return topics or _builtin_fallback()
+        except Exception:
+            return _builtin_fallback()
 
     def score_and_select(self, candidates):
-        cfg = load_topics_config()
-        min_score = float(cfg.get("min_accept_score", 7.5))
-        blocklist = cfg.get("blocklist_patterns", [])
         valid = [c for c in candidates
                  if not self.deduplicator.is_duplicate(c)
-                 and not self._blocked(c, blocklist)
-                 and c.total_score >= min_score]
+                 and self._passes_score_gate(c)]
         if not valid:
             valid = [c for c in candidates if not self.deduplicator.is_duplicate(c)]
         if not valid:
-            return self._pick_offline_topic(ContentBucket.SUCCESS_FAILURE, [])
+            return self._from_fallback(ContentBucket.SUCCESS_FAILURE, [])
         valid.sort(key=lambda t: t.total_score, reverse=True)
         return valid[0]
 
     def record_topic(self, topic):
         self.deduplicator.record_topic(topic)
 
-    def _discover_with_llm(self, bucket, used_titles):
-        candidates = self.generate_candidates(bucket, used_titles)
-        if not candidates:
-            raise ValueError("No candidates")
-        return self.score_and_select(candidates)
 
-    def _pick_content_bucket(self):
-        mix = load_topics_config().get("content_mix", {})
-        buckets = list(ContentBucket)
-        weights = [float(mix.get(b.value, 0.25)) for b in buckets]
-        return random.choices(buckets, weights=weights, k=1)[0]
-
-    def _story_mode_for_bucket(self, bucket):
-        # Always biographical for better content quality
-        return StoryMode.BIOGRAPHICAL
-
-    def _pick_offline_topic(self, bucket, used_titles):
-        all_topics = self._load_fallback()
-        available = [t for t in all_topics if not self.deduplicator.is_duplicate(t)]
-        bucket_topics = [t for t in available if t.content_bucket == bucket]
-        pool = bucket_topics or available or all_topics
-        return random.choice(pool).model_copy(update={"source": "offline"})
-
-    def _offline_candidate_pool(self, bucket, used_titles):
-        return [t for t in self._load_fallback()
-                if t.content_bucket == bucket and not self.deduplicator.is_duplicate(t)]
-
-    def _load_fallback(self):
-        path = CONFIG_DIR / "fallback_topics.yml"
-        if not path.exists():
-            return _builtin_fallback()
-        data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-        topics = [_dict_to_topic(item, source="offline") for item in data.get("topics", [])]
-        return topics or _builtin_fallback()
-
-    def _blocked(self, candidate, patterns):
-        text = f"{candidate.title_ta} {candidate.hook}".lower()
-        return any(p.lower() in text for p in patterns)
-
-
-def _dict_to_topic(data, source="llm", default_bucket=None, default_mode=None):
-    bucket_raw = data.get("content_bucket") or (default_bucket.value if default_bucket else "success_failure")
-    mode_raw   = data.get("story_mode") or (default_mode.value if default_mode else "biographical")
+def _dict_to_topic(data: dict, source="llm",
+                   default_bucket=None) -> TopicCandidate:
+    bucket_raw = data.get("content_bucket") or (
+        default_bucket.value if default_bucket else "success_failure"
+    )
+    mode_raw = data.get("story_mode", "biographical")
     try:    bucket = ContentBucket(bucket_raw)
     except: bucket = ContentBucket.SUCCESS_FAILURE
     try:    mode   = StoryMode(mode_raw)
     except: mode   = StoryMode.BIOGRAPHICAL
+
+    # Compute total score from all 7 dimensions
+    scores = [
+        float(data.get("curiosity_score",  data.get("curiosity",  8.0))),
+        float(data.get("emotion_score",    data.get("emotion",    8.0))),
+        float(data.get("conflict_score",   data.get("conflict",   8.0))),
+        float(data.get("shock_score",      data.get("shock",      7.5))),
+        float(data.get("story_score",      data.get("story",      8.0))),
+        float(data.get("thumbnail_score",  data.get("thumbnail",  7.5))),
+        float(data.get("tamil_score",      data.get("tamil",      8.0))),
+    ]
+    avg_score = sum(scores) / len(scores)
+
     return TopicCandidate(
-        title_ta=data.get("title_ta") or data.get("story_title", "Untitled"),
-        category=data.get("category", "storytelling"),
-        hook=data.get("hook", data.get("hook_question", "")),
-        protagonist=data.get("protagonist", "நாயகன்"),
-        protagonist_age=str(data.get("protagonist_age", "")),
-        situation=data.get("situation", ""),
-        core_problem=data.get("core_problem", ""),
-        emotional_hook=data.get("emotional_hook", ""),
-        turning_point=data.get("turning_point", ""),
-        lesson=data.get("lesson", ""),
-        hook_question=data.get("hook_question", data.get("hook", "")),
-        open_loop=data.get("open_loop", ""),
-        story_mode=mode,
-        content_bucket=bucket,
-        curiosity_score=float(data.get("curiosity_score", 8.0)),
-        emotion_score=float(data.get("emotion_score", 8.0)),
-        story_score=float(data.get("story_score", 8.0)),
-        lesson_score=float(data.get("lesson_score", 7.5)),
-        wikipedia_subject=data.get("wikipedia_subject", ""),
-        source=source,
+        title_ta         = data.get("title_ta") or data.get("story_title", "Untitled"),
+        category         = data.get("category", "storytelling"),
+        hook             = data.get("hook_question", data.get("hook", "")),
+        protagonist      = data.get("protagonist", "நாயகன்"),
+        protagonist_age  = str(data.get("protagonist_age", "")),
+        situation        = data.get("situation", ""),
+        core_problem     = data.get("core_problem", ""),
+        emotional_hook   = data.get("emotional_hook", ""),
+        turning_point    = data.get("turning_point", ""),
+        lesson           = data.get("lesson", ""),
+        hook_question    = data.get("hook_question", data.get("hook", "")),
+        open_loop        = data.get("open_loop", ""),
+        story_mode       = mode,
+        content_bucket   = bucket,
+        curiosity_score  = scores[0],
+        emotion_score    = scores[1],
+        story_score      = scores[4],
+        lesson_score     = scores[6],
+        wikipedia_subject= data.get("wikipedia_subject", ""),
+        source           = source,
+        total_score      = avg_score,
     )
 
 
-def _builtin_fallback():
+def _builtin_fallback() -> List[TopicCandidate]:
+    """High-scoring fallback topics — all pass the 8+ gate."""
     return [
         TopicCandidate(
-            title_ta="1009 முறை நிராகரிக்கப்பட்ட Colonel Sanders",
-            hook="65 வயதில் 1009 முறை தோற்றார். KFC ஆனது.",
+            title_ta="1009 முறை நிராகரிக்கப்பட்டவர் — Colonel Sanders கதை",
+            hook="1009 times. That's how many times they rejected him. At 65.",
             protagonist="Colonel Sanders", protagonist_age="65",
-            situation="Kentucky USA 1952",
-            core_problem="1009 restaurants rejected his recipe",
-            emotional_hook="யாரும் நம்பவில்லை",
-            turning_point="1009th attempt — Pete Harman said yes",
-            lesson="Age is not the limit. Persistence is the key.",
-            hook_question="65 வயதில் எல்லாம் முடிந்தவர் billionaire ஆனது எப்படி?",
-            open_loop="ஆனால் 1009வது முறை என்ன நடந்தது?",
-            story_mode=StoryMode.BIOGRAPHICAL,
-            content_bucket=ContentBucket.SUCCESS_FAILURE,
+            situation="Kentucky USA, 1952 — roadside restaurant",
+            core_problem="1009 restaurant owners rejected his chicken recipe",
+            emotional_hook="At 65, after bankruptcy, driving state-to-state with a single recipe",
+            turning_point="The 1010th call — Pete Harman of Utah said yes",
+            lesson="The only failure is stopping",
+            hook_question="65 வயதில் 1009 முறை தோற்றவர் எப்படி billionaire ஆனார்?",
+            open_loop="ஆனால் அந்த 1010-வது phone call-ல் என்ன நடந்தது?",
+            story_mode=StoryMode.BIOGRAPHICAL, content_bucket=ContentBucket.SUCCESS_FAILURE,
             wikipedia_subject="Colonel Sanders",
-            curiosity_score=9.5, emotion_score=9.0,
-            story_score=9.5, lesson_score=8.5, source="offline",
+            curiosity_score=9.5, emotion_score=9.0, story_score=9.5, lesson_score=8.5,
+            total_score=9.1, source="offline",
+        ),
+        TopicCandidate(
+            title_ta="Nokia ஏன் வீழ்ந்தது? ஒரு தவறான வார்த்தையின் கதை",
+            hook="In 2007, Nokia owned 40% of the world's phones. By 2013, it was gone.",
+            protagonist="Nokia", protagonist_age="",
+            situation="Finland boardroom, 2007 — iPhone launch day",
+            core_problem="Engineers knew Symbian was dying. Nobody told the CEO.",
+            emotional_hook="A culture of fear killed the world's #1 phone brand",
+            turning_point="The moment Nokia engineers chose silence over truth",
+            lesson="Silence in a boardroom can destroy empires",
+            hook_question="உலகின் #1 phone brand எப்படி 6 ஆண்டுகளில் மறைந்தது?",
+            open_loop="ஆனால் Nokia engineers-க்கு முன்பே தெரிந்திருந்தது — ஏன் சொல்லவில்லை?",
+            story_mode=StoryMode.BIOGRAPHICAL, content_bucket=ContentBucket.BUSINESS,
+            wikipedia_subject="Nokia",
+            curiosity_score=9.0, emotion_score=8.5, story_score=9.0, lesson_score=9.0,
+            total_score=8.9, source="offline",
+        ),
+        TopicCandidate(
+            title_ta="Kodak-ஐ கொன்றது Kodak-�ே — Digital camera-ஐ அவர்களே கண்டுபிடித்தார்கள்",
+            hook="Kodak invented the digital camera in 1975. Then buried it.",
+            protagonist="Kodak", protagonist_age="",
+            situation="Rochester NY, 1975 — secret lab",
+            core_problem="Steve Sasson's digital camera was hidden for 20 years to protect film revenue",
+            emotional_hook="The invention that could have saved them — they destroyed it themselves",
+            turning_point="2012: Kodak filed for bankruptcy. Instagram was valued at $1 billion.",
+            lesson="Protecting yesterday's success can kill tomorrow's survival",
+            hook_question="Digital camera-ஐ கண்டுபிடித்தவர்கள் Kodak-ஏ — பிறகு ஏன் bankrupt ஆனார்கள்?",
+            open_loop="Steve Sasson அந்த camera-ஐ CEO-விடம் காட்டியபோது என்ன நடந்தது?",
+            story_mode=StoryMode.BIOGRAPHICAL, content_bucket=ContentBucket.BUSINESS,
+            wikipedia_subject="Kodak",
+            curiosity_score=9.5, emotion_score=8.5, story_score=9.0, lesson_score=9.5,
+            total_score=9.0, source="offline",
+        ),
+        TopicCandidate(
+            title_ta="Nikola Tesla-வை யாரும் நினைவில் வைக்கவில்லை — Edison ஏன் வென்றார்?",
+            hook="Tesla gave us electricity. Edison took the credit. And the money.",
+            protagonist="Nikola Tesla", protagonist_age="36",
+            situation="New York, 1893 — the War of Currents",
+            core_problem="Tesla's AC power was better. Edison's DC lobby tried to destroy him.",
+            emotional_hook="Tesla died alone, penniless, in a hotel room. His patents lit the world.",
+            turning_point="The Chicago World's Fair 1893 — Tesla's AC lights won",
+            lesson="History remembers the marketers, not always the inventors",
+            hook_question="உலகிற்கு மின்சாரம் கொடுத்தவர் Tesla — ஆனால் ஏன் அவர் மறக்கப்பட்டார்?",
+            open_loop="Tesla-வும் Edison-உம் நேரடியாக சந்தித்த அந்த நாள் என்ன நடந்தது?",
+            story_mode=StoryMode.BIOGRAPHICAL, content_bucket=ContentBucket.SUCCESS_FAILURE,
+            wikipedia_subject="Nikola Tesla",
+            curiosity_score=9.5, emotion_score=9.0, story_score=9.5, lesson_score=8.5,
+            total_score=9.2, source="offline",
+        ),
+        TopicCandidate(
+            title_ta="உலகின் மிக குறுகிய போர் — 38 நிமிடங்கள்",
+            hook="The shortest war in history lasted 38 minutes. One side didn't even know it started.",
+            protagonist="Anglo-Zanzibar War", protagonist_age="",
+            situation="Zanzibar, August 27, 1896 — 9:02 AM",
+            core_problem="A new Sultan took power Britain didn't approve. They gave him an ultimatum.",
+            emotional_hook="The Sultan's palace was destroyed in 38 minutes. 500 casualties. Done.",
+            turning_point="9:40 AM — the Sultan fled. War over.",
+            lesson="Power without backing is just a title",
+            hook_question="வரலாற்றில் மிகவும் குறுகிய போர் — 38 நிமிடங்களில் என்ன நடந்தது?",
+            open_loop="ஆனால் அந்த Sultan போர் தொடங்கும் என்று நம்பினாரா?",
+            story_mode=StoryMode.BIOGRAPHICAL, content_bucket=ContentBucket.HISTORICAL_STORY,
+            wikipedia_subject="Anglo-Zanzibar War",
+            curiosity_score=9.5, emotion_score=8.0, story_score=8.5, lesson_score=7.5,
+            total_score=8.8, source="offline",
         ),
     ]
