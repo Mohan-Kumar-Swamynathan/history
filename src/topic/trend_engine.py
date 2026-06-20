@@ -26,11 +26,36 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 # Topics that are trending but NOT suitable for storytelling
+# Content bible: avoid news events, politics, war, sports scores
 TREND_BLOCKLIST = [
-    "cricket score", "ipl", "weather", "stock", "price",
-    "election", "poll", "vote", "accident", "death",
-    "movie release", "trailer", "song", "album",
+    # Sports/entertainment (low story potential)
+    "cricket", "ipl", "match", "score", "movie", "trailer",
+    "song", "album", "singer", "actor", "actress", "serial",
+    # News/current events (not evergreen)
+    "war", "attack", "bomb", "killed", "died", "death", "accident",
+    "flood", "earthquake", "fire", "protest", "arrested", "riot",
+    "election", "vote", "poll", "party", "minister", "government",
+    "iran", "israel", "ukraine", "russia", "pakistan", "china war",
+    # Financial tickers
+    "stock", "share", "price", "rate", "weather", "forecast",
+    "sensex", "nifty", "bitcoin", "crypto",
+    # Too generic
+    "news", "today", "live", "breaking", "update", "latest",
 ]
+
+# Wikipedia articles that are clearly suitable for storytelling
+STORY_SIGNALS = [
+    "founder", "ceo", "entrepreneur", "scientist", "inventor",
+    "athlete", "player", "director", "reformer", "pioneer",
+    "freedom fighter", "activist", "philosopher",
+    "founded", "invented", "discovered", "created", "built",
+    "failed", "rejected", "bankrupt", "struggled", "overcame",
+    "million", "billion", "crore", "first", "only", "youngest",
+    "despite", "although", "however", "eventually", "finally",
+]
+
+# Score minimum raised — content bible requires 8+
+SCORE_THRESHOLD = 6.8  # slightly lower for trend pass, LLM will re-score
 
 # Keywords that signal a GOOD story topic (person has overcome something)
 STORY_SIGNALS = [
@@ -45,13 +70,18 @@ def _fetch_google_trends_india() -> list[str]:
     """Fetch today's trending searches in India via pytrends."""
     try:
         from pytrends.request import TrendReq
-        pt = TrendReq(hl="en-IN", tz=330, timeout=(15, 30), retries=2, backoff_factor=0.5)
+        # method_whitelist removed in urllib3 >=2.0 — use requests_kwargs
+        try:
+            pt = TrendReq(hl="en-IN", tz=330, timeout=(15, 30), retries=2,
+                          requests_kwargs={"verify": True})
+        except TypeError:
+            pt = TrendReq(hl="en-IN", tz=330, timeout=(15, 30))
         df = pt.trending_searches(pn="india")
         trends = df[0].tolist()
         log.info("Google Trends India: %d trending topics", len(trends))
         return trends[:25]
     except Exception as e:
-        log.warning("pytrends failed: %s", e)
+        log.warning("pytrends failed: %s — using Wikipedia only", e)
         return []
 
 
@@ -97,15 +127,22 @@ def _fetch_wikipedia_pageviews_trending() -> list[str]:
 
 
 def _is_story_worthy(term: str) -> bool:
-    """Check if a trending term is suitable for a biographical story."""
+    """Check if a trending term could be a good storyline topic."""
     tl = term.lower()
-    # Skip news events, scores, entertainment
+    # Blocklist check — content bible says avoid news/politics/sports
     if any(b in tl for b in TREND_BLOCKLIST):
         return False
-    # Skip if it's just a movie/show name (no story arc)
-    if len(term.split()) == 1 and len(term) < 5:
+    # Too short (abbreviations, codes)
+    if len(term.replace(" ","")) < 4:
         return False
-    return True
+    # Pure number (year, date)
+    if term.strip().replace(" ","").isdigit():
+        return False
+    # Must look like a person name or company (capitalized) OR have a story signal
+    words = term.split()
+    is_proper_noun = any(w[0].isupper() for w in words if w)
+    has_story_signal = any(s in tl for s in STORY_SIGNALS[:8])
+    return is_proper_noun or has_story_signal
 
 
 def _has_wikipedia(term: str) -> Optional[str]:
