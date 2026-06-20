@@ -26,6 +26,28 @@ WIKI_SUMMARY_API = "https://en.wikipedia.org/api/rest_v1/page/summary/{}"
 WIKI_EXTRACT_API = "https://en.wikipedia.org/w/api.php?action=query&titles={}&prop=extracts&exintro=0&explaintext=1&format=json"
 
 
+
+def _transliterate_for_script(text: str) -> str:
+    """Transliterate common English proper nouns to Tamil phonetics
+    so the LLM script uses Tamil versions naturally."""
+    import re
+    replacements = [
+        (r"\bIIT Kharagpur\b", "ஐஐடி கரக்பூர்"),
+        (r"\bIIT\b", "ஐஐடி"), (r"\bStanford\b", "ஸ்டான்போர்டு"),
+        (r"\bHarvard\b", "ஹார்வர்டு"), (r"\bYale\b", "யேல்"),
+        (r"\bGoogle\b", "கூகுள்"), (r"\bApple\b", "ஆப்பிள்"),
+        (r"\bMicrosoft\b", "மைக்ரோசாஃப்ட்"), (r"\bAmazon\b", "அமேசான்"),
+        (r"\bNokia\b", "நோக்கியா"), (r"\bKodak\b", "கோடாக்"),
+        (r"\bMBA\b", "எம்பிஏ"), (r"\bCEO\b", "தலைமை நிர்வாகி"),
+        (r"\bscholarship\b", "உதவித்தொகை"),
+        (r"\bKentucky\b", "கென்டக்கி"), (r"\bFinland\b", "ஃபின்லாந்து"),
+        (r"\bGujarat\b", "குஜராத்"), (r"\bChennai\b", "சென்னை"),
+        (r"\bMumbai\b", "மும்பை"), (r"\bDelhi\b", "தில்லி"),
+    ]
+    for pattern, replacement in replacements:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return text
+
 def _fetch_wiki_text(subject: str) -> str:
     """Fetch full Wikipedia article text (not just intro)."""
     try:
