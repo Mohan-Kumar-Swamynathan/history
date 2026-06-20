@@ -301,6 +301,7 @@ def render_scene_frames(
     duration_s:      float,
     word_timings:    list,        # List[WordTiming]
     fps:             int = 12,
+    scene_idx:       int = 0,
 ) -> List[np.ndarray]:
     """Render all frames for one scene. Returns list of numpy arrays."""
     words        = beat_narration.split()
@@ -342,7 +343,7 @@ def render_scene_frames(
             frame_arr = apply_stop_motion_effects(
                 frame          = frame_arr,
                 frame_index    = fi,
-                scene_index    = 0,
+                scene_index    = scene_idx,
                 scene_progress = progress,
                 word_just_appeared = (visible > prev_visible),
                 word_age_frames    = word_pop_frame,
