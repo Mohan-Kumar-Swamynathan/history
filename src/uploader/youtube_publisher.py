@@ -29,8 +29,44 @@ class YouTubePublisher:
             "titles": metadata.title_options or [metadata.title_ta],
             "description": metadata.description_ta,
             "tags": metadata.tags,
+            "thumbnail_text": getattr(metadata, "thumbnail_text", ""),
+            "pinned_comment": getattr(metadata, "pinned_comment", ""),
+            "chapters": getattr(metadata, "chapters", []),
         }
-        return upload_video(video_path, thumbnail_path, payload, topic.title_ta, slug)
+        result = upload_video(video_path, thumbnail_path, payload, topic.title_ta, slug)
+        # Post pinned comment if upload succeeded
+        if result.get("video_id") and getattr(metadata, "pinned_comment", ""):
+            try:
+                self._post_pinned_comment(result["video_id"], metadata.pinned_comment)
+            except Exception as e:
+                log.warning("Pinned comment failed: %s", e)
+        return result
+
+
+    def _post_pinned_comment(self, video_id: str, comment: str) -> None:
+        """Post and pin a comment on the uploaded video."""
+        try:
+            from youtube_uploader import get_youtube_client
+            yt = get_youtube_client()
+            resp = yt.commentThreads().insert(
+                part="snippet",
+                body={
+                    "snippet": {
+                        "videoId": video_id,
+                        "topLevelComment": {
+                            "snippet": {"textOriginal": comment}
+                        }
+                    }
+                }
+            ).execute()
+            comment_id = resp["snippet"]["topLevelComment"]["id"]
+            # Pin it
+            yt.comments().setModerationStatus(
+                id=comment_id, moderationStatus="published"
+            ).execute()
+            log.info("✅ Pinned comment posted")
+        except Exception as e:
+            log.warning("Could not pin comment: %s", e)
 
     def upload_shorts(
         self,
