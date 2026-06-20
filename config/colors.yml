@@ -21,10 +21,10 @@ palettes:
     icon: [205, 35, 25]
     glow: [255, 160, 100]
   inspirational:
-    wash: [235, 250, 240]
-    accent: [34, 140, 70]
-    icon: [28, 120, 60]
-    glow: [160, 230, 180]
+    wash: [216, 243, 220]
+    accent: [45, 106, 79]
+    icon: [27, 67, 50]
+    glow: [149, 213, 178]
   thinking:
     wash: [245, 240, 255]
     accent: [120, 80, 180]
