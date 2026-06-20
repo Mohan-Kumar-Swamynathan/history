@@ -204,10 +204,30 @@ Return JSON:
         )
 
     def _offline_brief(self, topic: TopicCandidate) -> ResearchBrief:
+        """Build research brief from topic metadata when Wikipedia unavailable."""
+        # Use all available topic fields as story facts
+        story_facts = [f for f in [
+            topic.emotional_hook,
+            topic.situation,
+            topic.core_problem,
+            topic.turning_point,
+            topic.lesson,
+            topic.open_loop,
+            topic.hook_question,
+        ] if f and len(f) > 10]
+
+        # Extract years and numbers from topic fields
+        import re
+        all_text = " ".join(story_facts)
+        dates   = list(dict.fromkeys(re.findall(r"\b(1[89]\d{2}|20\d{2})\b", all_text)))[:5]
+        numbers = list(dict.fromkeys(re.findall(r"\b\d+(?:,\d{3})*(?:\.\d+)?\b", all_text)))[:8]
+
         return ResearchBrief(
-            topic=topic.title_ta,
-            facts=[topic.situation, topic.core_problem, topic.emotional_hook],
-            story_facts=[topic.situation, topic.core_problem, topic.turning_point, topic.lesson],
-            figures=[topic.protagonist],
-            sources=["offline_template"],
+            topic       = topic.title_ta,
+            facts       = story_facts[:5],
+            story_facts = story_facts,
+            dates       = dates,
+            figures     = [topic.protagonist],
+            key_numbers = numbers,
+            sources     = ["topic_metadata"],
         )
