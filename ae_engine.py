@@ -83,13 +83,17 @@ def _f(k, s):
     return _FC[(k, s)]
 
 def _segs(text):
+    """Split text into (segment, script) — character accurate, no majority vote."""
     out, cur, ct = [], "", None
     for ch in text:
-        cp = ord(ch)
-        t = "ta" if (0x0B80 <= cp <= 0x0BFF or ch in " .,!?₹%-:;'\"") else "en"
-        if t != ct and cur: out.append((cur, ct)); cur = ""
-        cur += ch; ct = t
-    if cur: out.append((cur, ct))
+        t = "ta" if (0x0B80 <= ord(ch) <= 0x0BFF) else "en"
+        if t != ct and cur:
+            out.append((cur, ct))
+            cur = ""
+        cur += ch
+        ct = t
+    if cur:
+        out.append((cur, ct))
     return out
 
 def _tw(draw, text, sz):
