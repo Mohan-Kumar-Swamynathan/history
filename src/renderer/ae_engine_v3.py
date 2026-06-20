@@ -306,7 +306,7 @@ def render_scene_frames(
     image_panel:     Image.Image,
     duration_s:      float,
     word_timings:    list,        # List[WordTiming]
-    fps:             int = 12,
+    fps:             int = 8,   # 8fps on CI — YouTube re-encodes anyway
     scene_idx:       int = 0,
 ) -> List[np.ndarray]:
     """Render all frames for one scene. Returns list of numpy arrays."""
