@@ -46,8 +46,8 @@ class YouTubePublisher:
     def _post_pinned_comment(self, video_id: str, comment: str) -> None:
         """Post and pin a comment on the uploaded video."""
         try:
-            from youtube_uploader import get_youtube_client
-            yt = get_youtube_client()
+            from youtube_uploader import _build_youtube_service
+            yt = _build_youtube_service()
             resp = yt.commentThreads().insert(
                 part="snippet",
                 body={
