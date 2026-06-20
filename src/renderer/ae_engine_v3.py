@@ -22,20 +22,29 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 W, H = 1920, 1080
 
 # Layout constants
-TEXT_X      = 60          # left margin for text
-TEXT_MAX_W  = 820         # max text column width (left 43%)
-TEXT_TOP    = 80          # top of text area
-IMAGE_X     = 940         # image panel starts here
-IMAGE_W     = W - IMAGE_X - 30   # 950px wide
-IMAGE_H     = H - 80      # full height minus padding
+TEXT_X      = 60
+TEXT_MAX_W  = 820
+TEXT_TOP    = 80
+IMAGE_X     = 940
+IMAGE_W     = W - IMAGE_X - 30
+IMAGE_H     = H - 80
 IMAGE_Y     = 40
 
-# Colors
-BG          = (252, 250, 244)   # warm cream
-INK         = (18,  16,  14)    # near-black
-RED         = (205, 35,  25)    # AE accent red
-GREY        = (160, 155, 148)   # spoken/faded word color
-DIVIDER     = (220, 215, 205)   # thin vertical divider
+# Brand colors — imported from brand.py, fallback inline
+try:
+    from src.renderer.brand import BG, INK, PRIMARY, SECONDARY, GREY, ACCENT, LIGHT
+    RED     = ACCENT     # use brand gold as highlight word color
+    DIVIDER = LIGHT      # use light green as divider
+except ImportError:
+    BG      = (250, 255, 248)   # off-white with green tint
+    INK     = (18,  35,  26)    # near-black with green tint
+    PRIMARY = (45, 106,  79)    # brand green
+    SECONDARY=(149,213, 178)    # light mint
+    GREY    = (107, 143, 113)   # muted green-grey
+    ACCENT  = (255, 183,   3)   # warm gold highlight
+    LIGHT   = (216, 243, 220)   # very light green
+    RED     = ACCENT
+    DIVIDER = LIGHT
 
 # Tamil font sizes — AE uses big, confident text
 FONT_SIZES  = [130, 108, 90, 76, 64, 54]
@@ -216,7 +225,13 @@ def render_frame(
 
     # ── Left: word-by-word text ───────────────────────────────────────
     if not all_words:
-        return _apply_ken_burns(frame, scene_progress)
+        # Apply subtle green brand tint
+    try:
+        from src.renderer.intro_renderer import apply_green_tint
+        frame = apply_green_tint(frame, strength=0.04)
+    except ImportError:
+        pass
+    return _apply_ken_burns(frame, scene_progress)
 
     words_to_show = all_words[:visible]
     max_h = H - TEXT_TOP - 120
