@@ -280,57 +280,101 @@ Return ONLY the Tamil narration text, no JSON."""
                 log.warning("Beat %d expansion failed: %s", i, e)
         return script
     def _offline_script(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
-        """Pure Tamil offline script — no English mixing, no date-dash issue."""
-        name  = topic.protagonist
-        facts = research.story_facts
-        get   = lambda i, d="": facts[i] if i < len(facts) else d
-        dates = research.dates
+        """Offline script — tries pre-written beats first, falls back to Tamil template."""
+        name = topic.protagonist
 
-        def beat(bt, ta):
+        def beat(bt, ta, vk=None):
             return StoryBeat(
-                beat_type=bt, narration_ta=ta, emotion=BEAT_EMOTIONS[bt],
-                protagonist=name, visual_keywords=[bt.value, "person", "story"],
+                beat_type=bt, narration_ta=_purify_tamil(ta),
+                emotion=BEAT_EMOTIONS[bt], protagonist=name,
+                visual_keywords=vk or [bt.value, "person", "story"],
             )
 
-        # Format year in Tamil — avoid "1950-ல்" which TTS reads as "1950 dash ல்"
-        yr = dates[0] if dates else ""
-        yr_txt = f"{yr} ஆம் ஆண்டு " if yr else ""
+        # Try to use pre-written beats from fallback_topics.yml
+        prewritten = self._get_prewritten_beats(topic)
+        if prewritten:
+            log.info("Using pre-written Tamil beats for: %s", name)
+            beats = []
+            structure = [
+                (BeatType.HOOK,          "hook",          ["person", "dramatic", "start"]),
+                (BeatType.CONTEXT,       "context",       ["background", "history", "vintage"]),
+                (BeatType.CONFLICT,      "conflict",      ["struggle", "failure", "problem"]),
+                (BeatType.ESCALATION,    "escalation",    ["crisis", "dark", "pressure"]),
+                (BeatType.TURNING_POINT, "turning_point", ["decision", "change", "light"]),
+                (BeatType.RESOLUTION,    "resolution",    ["success", "achievement", "victory"]),
+                (BeatType.LESSON,        "lesson",        ["wisdom", "lesson", "inspiration"]),
+            ]
+            for bt, key, vk in structure:
+                text = prewritten.get(key, "")
+                if text:
+                    beats.append(beat(bt, text, vk))
+            if len(beats) == 7:
+                return NarrativeScript(topic=topic, beats=beats, format="long")
 
-        situation = topic.situation or get(1, "")
-        # Remove English from situation if any
-        import re
-        situation_ta = re.sub(r'[A-Za-z,]+', '', situation).strip()
+        # Tamil template fallback (when no pre-written beats)
+        log.info("Using Tamil template for: %s", name)
+        yr = research.dates[0] if research.dates else ""
+        yr_txt = f"{yr} ஆம் ஆண்டில் " if yr else ""
+        lesson_ta = _purify_tamil(topic.lesson or "தோல்வி முடிவல்ல, ஒரு படி மட்டுமே")
 
         return NarrativeScript(topic=topic, format="long", beats=[
             beat(BeatType.HOOK,
-                f"{topic.emotional_hook or get(0, 'இது ஒரு நம்பமுடியாத கதை')}. "
-                f"{topic.hook_question or 'இந்த கதை உங்களை திரும்பிப் பார்க்க வைக்கும்.'}"),
+                f"{_purify_tamil(topic.emotional_hook or 'இது ஒரு நம்பமுடியாத கதை')}. "
+                f"{_purify_tamil(topic.hook_question or 'இந்த கதை உங்களை திரும்பிப் பார்க்க வைக்கும்.')}"
+                f" {_purify_tamil(topic.open_loop or '')}",
+                ["person", "dramatic", "start"]),
             beat(BeatType.CONTEXT,
                 f"{yr_txt}{name} பற்றி கேட்டிருப்பீர்கள். "
                 f"ஆனால் இந்த கதை யாரும் சொல்லாதது. "
-                f"{situation_ta}. "
-                f"அந்த நாட்களில் யாரும் கற்பனை கூட செய்யவில்லை என்ன நடக்கப் போகிறது என்று."),
+                f"அவர் வாழ்க்கை எளிதாக இல்லை. "
+                f"அந்த நாட்களில் யாரும் என்ன நடக்கும் என்று கற்பனை கூட செய்யவில்லை.",
+                ["background", "humble", "start"]),
             beat(BeatType.CONFLICT,
-                f"{topic.core_problem or get(3, 'தோல்வி வந்தது')}. "
+                f"{_purify_tamil(topic.core_problem or 'தோல்வி வந்தது')}. "
                 f"தோல்வி மேல் தோல்வி வந்தது. "
                 f"யாரும் நம்பவில்லை. "
-                f"ஆனால் {name} விட்டுக்கொடுக்கவில்லை."),
+                f"ஆனால் {name} விட்டுக்கொடுக்கவில்லை.",
+                ["struggle", "rejection", "failure"]),
             beat(BeatType.ESCALATION,
                 f"நிலைமை இன்னும் மோசமானது. "
-                f"{get(5, 'எல்லா வழிகளும் மூடிக்கொண்டன.')} "
+                f"எல்லா வழிகளும் மூடியது போல் தோன்றியது. "
                 f"இதுதான் மிகவும் இருண்ட தருணம். "
-                f"இனி முடியாது என்று தோன்றியது."),
+                f"இனி முடியாது என்று உலகம் நினைத்தது.",
+                ["dark", "crisis", "hopeless"]),
             beat(BeatType.TURNING_POINT,
-                f"{topic.turning_point or get(7, 'திடீரென்று ஒரு மாற்றம்')}. "
-                f"அந்த ஒரு நிமிடம் எல்லாவற்றையும் மாற்றியது. "
-                f"இனி வேறொரு வழி தெரிந்தது."),
+                f"{_purify_tamil(topic.turning_point or 'திடீரென்று ஒரு மாற்றம் வந்தது')}. "
+                f"அந்த ஒரு தருணம் எல்லாவற்றையும் மாற்றியது. "
+                f"இனி வேறொரு வழி தெரிந்தது.",
+                ["decision", "turning", "light"]),
             beat(BeatType.RESOLUTION,
                 f"{name} மீண்டும் எழுந்தார். "
                 f"உலகம் அவரை வேறுவிதமாகப் பார்க்க ஆரம்பித்தது. "
-                f"இன்று அந்த பெயர் மறக்க முடியாதது."),
+                f"அவரின் கனவு நனவானது. "
+                f"இன்று அந்த பெயர் மறக்க முடியாதது.",
+                ["success", "recognition", "achievement"]),
             beat(BeatType.LESSON,
-                f"பாடம் என்ன? {topic.lesson or 'தோல்வி முடிவல்ல, ஒரு படி மட்டுமே'}. "
-                f"{name} நமக்கு இதை சொல்கிறார். "
+                f"பாடம் என்ன? {lesson_ta}. "
+                f"{name} நமக்கு இதை நிரூபித்தார். "
                 f"இந்த வீடியோ பயனுள்ளதாக இருந்தால் லைக் செய்யுங்கள், "
-                f"சப்ஸ்கிரைப் செய்யுங்கள், பெல் அழுத்துங்கள். நன்றி!"),
+                f"சப்ஸ்கிரைப் செய்யுங்கள், பெல் அழுத்துங்கள். நன்றி!",
+                ["wisdom", "lesson", "motivation"]),
         ])
+
+    def _get_prewritten_beats(self, topic: TopicCandidate) -> dict:
+        """Load pre-written Tamil beats from fallback_topics.yml if available."""
+        try:
+            from src.core.config_loader import CONFIG_DIR
+            import yaml
+            path = CONFIG_DIR / "fallback_topics.yml"
+            if not path.exists():
+                return {}
+            data = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            for t in data.get("topics", []):
+                # Match by protagonist name (flexible matching)
+                stored = t.get("protagonist", "").lower().strip()
+                current = topic.protagonist.lower().strip()
+                if stored in current or current in stored:
+                    return t.get("beats", {})
+        except Exception as e:
+            log.warning("Could not load prewritten beats: %s", e)
+        return {}
