@@ -41,14 +41,21 @@ class TopicDeduplicator:
         return False
 
     def record_topic(self, topic: TopicCandidate) -> None:
+        # Skip if already recorded (prevents duplicates from multiple runs)
+        if self.is_duplicate(topic):
+            return
         entry = {
             "title_ta": topic.title_ta,
             "protagonist": topic.protagonist,
             "content_bucket": topic.content_bucket.value,
             "fingerprint": self._fingerprint(topic.title_ta),
+            "recorded_at": __import__("datetime").datetime.utcnow().isoformat(),
         }
         history = self._read_history_file(TRACKED_HISTORY)
-        history.append(entry)
+        # Deduplicate existing entries too
+        seen_fps = {self._fingerprint(e.get("title_ta","")) for e in history}
+        if entry["fingerprint"] not in seen_fps:
+            history.append(entry)
         history = self._trim_history(history)
         TRACKED_HISTORY.parent.mkdir(parents=True, exist_ok=True)
         TRACKED_HISTORY.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -57,11 +64,14 @@ class TopicDeduplicator:
         RUNTIME_HISTORY.write_text(json.dumps(history, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def recent_avoid_list(self, limit: int = 20) -> str:
-        titles = self.load_used_titles()[-limit:]
-        protagonists = self.load_used_protagonists()[-limit:]
-        lines = [f"- {title}" for title in titles]
-        lines += [f"- protagonist: {name}" for name in protagonists if name]
-        return "\n".join(lines) if lines else "(none yet)"
+        """Return used titles + protagonists for LLM avoid list."""
+        titles       = list(self._collect_used_titles())[-limit:]
+        protagonists = list(self._collect_used_protagonists())[-limit:]
+        lines  = ["USED TITLES (never repeat):"]
+        lines += [f"  - {t}" for t in titles]
+        lines += ["USED PROTAGONISTS (never repeat same person/company):"]
+        lines += [f"  - {p}" for p in protagonists if p]
+        return "\n".join(lines) if len(lines) > 2 else "(none yet)"
 
     def _collect_used_titles(self) -> Set[str]:
         titles: Set[str] = set()
