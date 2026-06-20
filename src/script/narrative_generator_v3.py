@@ -49,10 +49,13 @@ BEAT_EMOTIONS = {
     BeatType.LESSON:        "neutral",
 }
 
-# Words per beat — total 1500-2500 words across 7 beats = ~200-350 per beat
-BEAT_WORDS_MIN = 200
-BEAT_WORDS_MAX = 350
-BEAT_WORDS_TARGET = 250
+# Tamil TTS pace: ~110 words/min (slower than English)
+# 100-150 Tamil words per beat × 7 = 700-1050 words = 6-10 min video
+# GitHub Models caps JSON at ~4k tokens — 2-pass to avoid truncation
+BEAT_WORDS_MIN    = 100
+BEAT_WORDS_MAX    = 150
+BEAT_WORDS_TARGET = 120
+TOTAL_WORDS_MIN   = 600    # 600 Tamil words ≈ 5.5 min at Tamil TTS pace
 
 
 SCRIPT_PROMPT = """You are the Script Writer for "துளிர்" Tamil storytelling channel.
@@ -91,7 +94,9 @@ SCRIPT STRUCTURE (7 beats, mandatory order):
    Conversational. Personal. Then natural CTA (like, subscribe, bell).
 
 WRITING RULES:
-- Each beat: {min_words}-{max_words} Tamil words (3-5 short sentences of 8-12 words each)
+- Each beat: {min_words}-{max_words} Tamil words MAXIMUM (2-3 short sentences of 8-12 words each)
+- CRITICAL: Keep each beat short and punchy — quality over quantity
+- The LLM has token limits — shorter beats ensure complete JSON response
 - Conversational Tamil — பேசும் style, NOT எழுத்து style
 - Every beat: at least one SPECIFIC number, year, or place from the facts
 - No invented facts. If fact is uncertain, say "சொல்கிறார்கள்" or "கதை போகிறது"
@@ -119,9 +124,9 @@ class NarrativeGeneratorV3:
             script = self._llm_script(topic, research)
             total  = sum(len(b.narration_ta.split()) for b in script.beats)
             log.info("Script: %d beats, %d words total", len(script.beats), total)
-            if total < 800:
-                log.warning("Script too short (%d words) — regenerating", total)
-                script = self._llm_script(topic, research)
+            if total < TOTAL_WORDS_MIN:
+                log.warning("Script short (%d words) — expanding with 2nd pass", total)
+                script = self._expand_short_beats(script, topic, research)
             return script
         except Exception as exc:
             log.warning("LLM script failed: %s — offline", exc)
@@ -183,6 +188,37 @@ class NarrativeGeneratorV3:
 
         return NarrativeScript(topic=topic, beats=beats, format="long")
 
+
+    def _expand_short_beats(self, script: NarrativeScript, topic: TopicCandidate,
+                            research: ResearchBrief) -> NarrativeScript:
+        """Second pass: expand beats that are too short."""
+        short_beats = [(i, b) for i, b in enumerate(script.beats)
+                       if len(b.narration_ta.split()) < BEAT_WORDS_MIN]
+        if not short_beats:
+            return script
+        log.info("Expanding %d short beats via 2nd LLM pass", len(short_beats))
+        facts_block = "\n".join(f"  • {f}" for f in research.story_facts[:8])
+        for i, beat in short_beats:
+            prompt = f"""Expand this Tamil narration beat to {BEAT_WORDS_MIN}-{BEAT_WORDS_MAX} words.
+Beat type: {beat.beat_type.value}
+Current narration (too short — {len(beat.narration_ta.split())} words):
+{beat.narration_ta}
+
+Facts to weave in: {facts_block}
+
+Write {BEAT_WORDS_MIN}-{BEAT_WORDS_MAX} word expansion in conversational Tamil.
+Keep the same story arc. Add specific details, emotions, and sensory descriptions.
+Return ONLY the Tamil narration text, no JSON."""
+            try:
+                expanded = generate_text(prompt, max_tokens=800)
+                expanded = expanded.strip().strip('"').strip("'")
+                if len(expanded.split()) >= BEAT_WORDS_MIN:
+                    script.beats[i] = beat.model_copy(update={"narration_ta": expanded})
+                    log.info("Beat %d expanded: %d → %d words", i,
+                             len(beat.narration_ta.split()), len(expanded.split()))
+            except Exception as e:
+                log.warning("Beat %d expansion failed: %s", i, e)
+        return script
     def _offline_script(self, topic: TopicCandidate, research: ResearchBrief) -> NarrativeScript:
         """Grounded offline script — uses research facts, no LLM."""
         name  = topic.protagonist
