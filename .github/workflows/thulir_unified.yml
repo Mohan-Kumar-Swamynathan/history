@@ -119,9 +119,15 @@ jobs:
         run: |
           git config user.name  "Thulir Bot"
           git config user.email "bot@thulir.local"
-          git add data/topic_history.json upload_state.json output/state/ 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
+          # Force-add upload state files (they may have changed during upload)
+          git add -f data/topic_history.json 2>/dev/null || true
+          git add -f upload_state.json 2>/dev/null || true
+          git add -f output/state/ 2>/dev/null || true
+          git add -f .keepalive 2>/dev/null || true
+          git status --short
+          git diff --staged --quiet || git commit -m "chore: update topic history + upload state [skip ci]"
           git push || true
+          echo "✅ State persisted" 
 
   # ── Evening upload (19:00 IST) ─────────────────────────────────────
   evening_bundle:
@@ -187,6 +193,12 @@ jobs:
         run: |
           git config user.name  "Thulir Bot"
           git config user.email "bot@thulir.local"
-          git add data/topic_history.json upload_state.json output/state/ 2>/dev/null || true
-          git diff --staged --quiet || git commit -m "chore: update topic history [skip ci]"
+          # Force-add upload state files (they may have changed during upload)
+          git add -f data/topic_history.json 2>/dev/null || true
+          git add -f upload_state.json 2>/dev/null || true
+          git add -f output/state/ 2>/dev/null || true
+          git add -f .keepalive 2>/dev/null || true
+          git status --short
+          git diff --staged --quiet || git commit -m "chore: update topic history + upload state [skip ci]"
           git push || true
+          echo "✅ State persisted" 
