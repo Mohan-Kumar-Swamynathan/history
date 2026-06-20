@@ -99,6 +99,16 @@ jobs:
           if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
+          python -c "
+import sys, traceback
+try:
+    from src.pipelines.generate_video_v3 import VideoPipelineV3
+    print('✅ Import OK')
+except Exception as e:
+    print('❌ Import failed:', e)
+    traceback.print_exc()
+    sys.exit(1)
+"
           python generate_video.py \
             --format long \
             --daily-slot morning_long \
