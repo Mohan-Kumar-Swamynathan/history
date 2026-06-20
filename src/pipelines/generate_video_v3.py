@@ -131,6 +131,7 @@ class VideoPipelineV3:
                 duration_s     = beat.duration_seconds,
                 word_timings   = seg.word_timings,
                 fps            = 12,
+                scene_idx      = i,
             )
 
             if hook_frame is None and frames:
@@ -197,7 +198,7 @@ class VideoPipelineV3:
                 head = batch[:TRANSITION_FRAMES]
                 for ti in range(min(len(tail), len(head), TRANSITION_FRAMES)):
                     t_progress = (ti + 1) / TRANSITION_FRAMES
-                    blended = render_transition(tail[ti], head[ti], t_progress, style="wipe")
+                    blended = render_transition(tail[ti], head[ti], t_progress, style="flipbook")
                     write_frame(blended)
                 # Write rest of batch after transition
                 for f in batch[TRANSITION_FRAMES:]:
