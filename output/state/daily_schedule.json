@@ -2,8 +2,8 @@
   "date": "2026-06-21",
   "slots": {
     "morning_long": {
-      "run_id": "20260621_062313_7a324440",
-      "completed_at": "2026-06-21T06:59:37.263717"
+      "run_id": "test-run",
+      "completed_at": "2026-06-21T12:32:27.732880"
     },
     "evening_long": {
       "run_id": "20260621_115518_638b3115",
