@@ -16,7 +16,7 @@ from src.script.shorts_script_generator import ShortsScriptGenerator
 from src.storyboard.story_beat_extractor import StoryBeatExtractor
 from src.subtitle_engine.subtitle_engine import SubtitleEngine
 from src.core.models import WordTiming
-from src.topic.topic_scorer import TopicScorer, _builtin_fallback_topics
+from src.topic.topic_scorer import TopicScorer, _builtin_fallback
 from src.visual_planner.visual_planner import VisualPlanner
 from src.research.research_collector import ResearchCollector
 from src.scheduler.content_scheduler import ContentScheduler, DailySlot
@@ -41,7 +41,7 @@ def test_topic_candidate_weighted_score():
 
 def test_topic_scorer_offline_fallback():
     scorer = TopicScorer()
-    topic = scorer._pick_offline_topic(ContentBucket.SUCCESS_FAILURE, [])
+    topic = scorer._from_fallback(ContentBucket.SUCCESS_FAILURE, [])
     assert topic.title_ta
     assert topic.total_score >= 7.5 or topic.curiosity_score >= 7.5
 
@@ -64,7 +64,7 @@ def test_topic_scorer_rejects_blocklist():
 def test_offline_long_script_meets_targets():
     from src.core.config_loader import load_topics_config
 
-    topic = _builtin_fallback_topics()[0]
+    topic = _builtin_fallback()[0]
     research = ResearchCollector()._offline_brief(topic)
     script = build_offline_long_script(topic, research)
     targets = load_topics_config().get("script_targets", {})
@@ -78,7 +78,7 @@ def test_offline_long_script_meets_targets():
 
 
 def test_shorts_offline_script_word_count():
-    topic = _builtin_fallback_topics()[0]
+    topic = _builtin_fallback()[0]
     research = ResearchCollector()._offline_brief(topic)
     script = ShortsScriptGenerator()._generate_offline(topic)
     result = ScriptValidator().validate_shorts_script(
@@ -378,7 +378,7 @@ def test_plan_scene_stream_chunks_matches_crossfade_total():
 def test_normalize_beat_count_pads_missing_beats():
     from src.script.script_enricher import enrich_long_script, normalize_beat_count
 
-    topic = _builtin_fallback_topics()[0]
+    topic = _builtin_fallback()[0]
     research = ResearchCollector()._offline_brief(topic)
     beats = [
         StoryBeat(
@@ -400,7 +400,7 @@ def test_normalize_beat_count_pads_missing_beats():
 def test_enrich_long_script_meets_minimum_words():
     from src.script.script_enricher import enrich_long_script
 
-    topic = _builtin_fallback_topics()[0]
+    topic = _builtin_fallback()[0]
     research = ResearchCollector()._offline_brief(topic)
     short_beats = [
         StoryBeat(

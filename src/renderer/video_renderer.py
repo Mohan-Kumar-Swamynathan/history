@@ -106,15 +106,21 @@ class VideoRenderer:
         output_path: Path,
         bgm_path: Path | None = None,
         bgm_volume: float = 0.08,
+        intro_delay_seconds: float = 0.0,
+        strict: bool = False,
     ) -> Path:
         output_path.parent.mkdir(parents=True, exist_ok=True)
         video_duration = self._probe_duration(video_path)
         audio_duration = self._probe_duration(narration_path)
-        target_duration = max(video_duration, audio_duration)
+        delayed_audio_end = intro_delay_seconds + audio_duration
+        target_duration = max(video_duration, delayed_audio_end)
+
+        delay_ms = max(0, int(intro_delay_seconds * 1000))
+        voice_filter = f"[1:a]adelay={delay_ms}|{delay_ms}[voice]" if delay_ms else "[1:a]anull[voice]"
 
         if bgm_path and bgm_path.exists():
             filter_complex = (
-                "[1:a]volume=1.0[voice];"
+                f"{voice_filter};"
                 f"[2:a]volume={bgm_volume},aloop=loop=-1:size=2e+09,"
                 f"atrim=0:{target_duration:.2f}[bgm];"
                 "[voice][bgm]amix=inputs=2:duration=longest:dropout_transition=2[aout]"
@@ -131,18 +137,23 @@ class VideoRenderer:
                 str(output_path),
             ]
         else:
+            filter_complex = voice_filter
             command = [
                 "ffmpeg", "-y", "-loglevel", "error",
                 "-i", str(video_path),
                 "-i", str(narration_path),
-                "-map", "0:v", "-map", "1:a",
+                "-filter_complex", filter_complex,
+                "-map", "0:v", "-map", "[voice]",
                 "-c:v", "copy", "-c:a", "aac", "-b:a", "192k",
                 "-t", f"{target_duration:.3f}",
                 str(output_path),
             ]
         result = subprocess.run(command, capture_output=True, text=True, check=False)
         if result.returncode != 0:
-            log.warning("Audio mux failed, copying video only: %s", result.stderr)
+            message = f"Audio mux failed: {result.stderr}"
+            if strict:
+                raise RuntimeError(message)
+            log.warning("%s — copying video only", message)
             shutil.copy(video_path, output_path)
         return output_path
 

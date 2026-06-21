@@ -83,6 +83,9 @@ jobs:
           pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Run tests
+        run: pytest tests/test_pipeline_v3.py tests/test_platform.py -q
+
       - name: Restore YouTube credentials
         run: |
           if [ -n "$YOUTUBE_TOKEN_BASE64" ]; then
@@ -99,7 +102,6 @@ jobs:
           if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
-          python -c 'import sys,traceback; [print("OK:",m) or None for m in ["testing"]]' || true
           python generate_video.py \
             --format long \
             --daily-slot morning_long \
@@ -156,6 +158,9 @@ jobs:
             fonts-noto-extra
           pip install --upgrade pip
           pip install -r requirements.txt
+
+      - name: Run tests
+        run: pytest tests/test_pipeline_v3.py tests/test_platform.py -q
 
       - name: Restore YouTube credentials
         run: |

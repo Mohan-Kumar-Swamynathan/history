@@ -16,7 +16,10 @@ Pipeline:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
+import shutil
+import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -27,9 +30,10 @@ from PIL import Image
 
 from src.core.config_loader import get_output_dir, load_emotions_config
 from src.core.free_guard import validate_free_only_mode
-from src.core.models import VideoPackage, WordTiming
+from src.core.models import TopicCandidate, VideoPackage, WordTiming
 from src.research.research_collector import ResearchCollector
 from src.renderer.bgm_generator import generate_bgm
+from src.renderer.brand import INTRO_DURATION_S
 from src.renderer.video_renderer import VideoRenderer
 from src.scheduler.content_scheduler import ContentScheduler, DailySlot
 from src.seo.metadata_generator import MetadataGenerator
@@ -41,16 +45,29 @@ from src.voice_engine.voice_engine import VoiceEngine
 
 # v3 components
 from src.script.narrative_generator_v3 import NarrativeGeneratorV3
-from src.renderer.intro_renderer import (
-    render_intro_frames,
-    render_lower_third,
-    apply_green_tint,
-)
+from src.renderer.intro_renderer import render_intro_frames, render_lower_third
 from src.image_engine.image_engine import ImageEngine
 from src.renderer.ae_engine_v3 import render_scene_frames, render_transition
 from src.renderer.shorts_fast import generate_shorts
 
 log = logging.getLogger(__name__)
+
+RENDER_FPS = 8  # render at 8fps — 33% fewer PIL frames
+
+
+def resample_intro_frames(intro_frames: List[np.ndarray], render_fps: int) -> List[np.ndarray]:
+    """Evenly sample intro frames so intro duration matches INTRO_DURATION_S at render_fps."""
+    target_count = max(1, int(INTRO_DURATION_S * render_fps))
+    if not intro_frames:
+        return intro_frames
+    if len(intro_frames) == target_count:
+        return intro_frames
+    indices = np.linspace(0, len(intro_frames) - 1, target_count, dtype=int)
+    return [intro_frames[index] for index in indices]
+
+
+def intro_offset_ms() -> int:
+    return int(INTRO_DURATION_S * 1000)
 
 
 class VideoPipelineV3:
@@ -80,188 +97,260 @@ class VideoPipelineV3:
         run_id  = datetime.utcnow().strftime("%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:8]
         run_dir = get_output_dir() / "runs" / run_id
         run_dir.mkdir(parents=True, exist_ok=True)
-        log.info("Run %s starting (v3 pipeline)", run_id)
+        log.info("Run %s starting (v3 pipeline, format=%s)", run_id, video_format)
 
-        # ── 1. Topic ───────────────────────────────────────────────────
+        topic = self._resolve_topic(category, topic_override)
+        log.info("Topic: %s", topic.title_ta)
+
+        research = self.research.collect(topic)
+
+        if video_format == "short":
+            return self._run_shorts_only(
+                run_id, run_dir, topic, research, skip_upload, daily_slot
+            )
+
+        return self._run_long_video(
+            run_id, run_dir, topic, research, skip_upload, daily_slot, include_shorts
+        )
+
+    def _resolve_topic(
+        self,
+        category: Optional[str],
+        topic_override: Optional[str],
+    ) -> TopicCandidate:
         if topic_override:
-            from src.core.models import TopicCandidate
-            topic = TopicCandidate(
+            return TopicCandidate(
                 title_ta=topic_override,
                 category=category or "storytelling",
                 protagonist=topic_override.split()[0],
                 source="manual",
             )
-        else:
-            topic = self.topic_scorer.discover_topic(category=category)
-        log.info("Topic: %s", topic.title_ta)
+        return self.topic_scorer.discover_topic(category=category)
 
-        # ── 2. Research ────────────────────────────────────────────────
-        research = self.research.collect(topic)
+    def _run_shorts_only(
+        self,
+        run_id: str,
+        run_dir: Path,
+        topic: TopicCandidate,
+        research,
+        skip_upload: bool,
+        daily_slot: Optional[str],
+    ) -> VideoPackage:
+        script = self.narrative.generate(topic, research)
+        hook_beat = script.beats[0]
 
-        # ── 3. Script — 6 beats ────────────────────────────────────────
+        audio_dir = run_dir / "audio"
+        narration_bundle = self.voice_engine.synthesize_all_beats([hook_beat], audio_dir)
+        hook_segment = narration_bundle.segments[0]
+
+        beat_images = self.image_engine.prefetch_all([hook_beat], topic.title_ta)
+        hook_image = beat_images.get(0)
+
+        shorts_path = run_dir / "shorts.mp4"
+        generate_shorts(
+            hook_narration=hook_beat.narration_ta,
+            hook_audio_path=Path(hook_segment.audio_path),
+            hook_image=hook_image,
+            protagonist=topic.protagonist,
+            output_path=shorts_path,
+            duration_s=min(hook_segment.duration_seconds + 2, 55.0),
+        )
+
+        chapters = [{"time": "00:00:00", "title": hook_beat.beat_type.value}]
+        try:
+            metadata = self.metadata_gen.generate(topic, [hook_beat], chapters)
+        except Exception as exc:
+            log.warning("Metadata failed (%s) — offline", exc)
+            metadata = MetadataGenerator()._offline(topic, "", [hook_beat])
+
+        if not skip_upload:
+            shorts_slug = hashlib.md5(f"{topic.title_ta}-shorts-{run_id}".encode()).hexdigest()[:12]
+            self.uploader.upload_shorts(shorts_path, metadata, topic, shorts_slug)
+
+        self._finalize_run(topic, daily_slot, run_id)
+
+        package = VideoPackage(
+            run_id=run_id,
+            topic=topic,
+            long_video_path=str(shorts_path),
+            shorts_video_path=str(shorts_path),
+            metadata=metadata,
+            format="short",
+        )
+        self._write_manifest(run_dir, package)
+        log.info("Run %s complete — Shorts %s", run_id, shorts_path)
+        return package
+
+    def _run_long_video(
+        self,
+        run_id: str,
+        run_dir: Path,
+        topic: TopicCandidate,
+        research,
+        skip_upload: bool,
+        daily_slot: Optional[str],
+        include_shorts: bool,
+    ) -> VideoPackage:
         script = self.narrative.generate(topic, research)
         beats  = script.beats
         log.info("Script: %d beats", len(beats))
 
-        # ── 4. Voice synthesis ─────────────────────────────────────────
         audio_dir = run_dir / "audio"
         narration_bundle = self.voice_engine.synthesize_all_beats(beats, audio_dir)
         log.info("Audio: %.0fs", narration_bundle.total_duration_seconds)
 
-        # Apply audio durations to beats
-        for i, (beat, seg) in enumerate(zip(beats, narration_bundle.segments)):
-            beats[i] = beat.model_copy(update={"duration_seconds": seg.duration_seconds + 0.3})
+        for index, (beat, segment) in enumerate(zip(beats, narration_bundle.segments)):
+            beats[index] = beat.model_copy(
+                update={"duration_seconds": segment.duration_seconds + 0.3}
+            )
 
-        # ── 5. Prefetch all images ────────────────────────────────────
         log.info("Fetching scene images from Pexels...")
         beat_images = self.image_engine.prefetch_all(beats, topic.title_ta)
         log.info("Images ready: %d", len(beat_images))
 
-        # ── 6. Render all scenes ──────────────────────────────────────
-        RENDER_FPS = 8   # render at 8fps — 33% fewer PIL frames
-        log.info("Rendering frames (8fps → 24fps output, PIL only)...")
+        log.info("Rendering frames (%dfps → 24fps output, PIL only)...", RENDER_FPS)
         all_frame_batches: List[List[np.ndarray]] = []
         hook_frame = None
 
-        for i, beat in enumerate(beats):
-            seg        = narration_bundle.segments[i]
-            image_panel = beat_images.get(i, beat_images.get(0))
+        for index, beat in enumerate(beats):
+            segment = narration_bundle.segments[index]
+            image_panel = beat_images.get(index, beat_images.get(0))
 
             frames = render_scene_frames(
-                beat_narration = beat.narration_ta,
-                image_panel    = image_panel,
-                duration_s     = beat.duration_seconds,
-                word_timings   = seg.word_timings,
-                fps            = RENDER_FPS,
-                scene_idx      = i,
+                beat_narration=beat.narration_ta,
+                image_panel=image_panel,
+                duration_s=beat.duration_seconds,
+                word_timings=segment.word_timings,
+                fps=RENDER_FPS,
+                scene_idx=index,
             )
 
             if hook_frame is None and frames:
                 hook_frame = frames[int(len(frames) * 0.7)]
 
             all_frame_batches.append(frames)
-            log.info("Scene %d/%d — %d frames", i + 1, len(beats), len(frames))
+            log.info("Scene %d/%d — %d frames", index + 1, len(beats), len(frames))
 
-        # ── 7. Assemble with transitions ──────────────────────────────
         log.info("Assembling video...")
-
-        # Generate branded intro (3.5s)
         log.info("Rendering intro card...")
-        intro_frames = render_intro_frames(
-            channel_name_ta = "துளிர்",
-            tagline_ta      = "உண்மையான கதைகள். உண்மையான பாடங்கள்.",
-            handle          = "@thulir",
-            topic_ta        = topic.title_ta[:35],
+        intro_frames_raw = render_intro_frames(
+            channel_name_ta="துளிர்",
+            tagline_ta="உண்மையான கதைகள். உண்மையான பாடங்கள்.",
+            handle="@thulir",
+            topic_ta=topic.title_ta[:35],
         )
-        log.info("Intro: %d frames", len(intro_frames))
+        intro_frames = resample_intro_frames(intro_frames_raw, RENDER_FPS)
+        log.info("Intro: %d frames (resampled from %d)", len(intro_frames), len(intro_frames_raw))
 
-        TRANSITION_FRAMES = 4   # ~0.3s at 12fps — quick wipe like AE
+        transition_frames = 4
         raw_video_path = run_dir / "raw_video.mp4"
 
-        import subprocess
         enc_cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "rawvideo", "-vcodec", "rawvideo",
             "-s", "1920x1080", "-pix_fmt", "rgb24",
-            "-r", str(RENDER_FPS),   # input raw fps
+            "-r", str(RENDER_FPS),
             "-i", "pipe:0",
-            "-vf", f"fps=24",        # duplicate frames to 24fps (smooth playback)
+            "-vf", "fps=24",
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-pix_fmt", "yuv420p",
             str(raw_video_path),
         ]
         enc_proc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
 
-        import hashlib as _hlib
         prev_hash = None
         prev_bytes = None
 
-        def write_frame(f: np.ndarray) -> None:
+        def write_frame(frame: np.ndarray) -> None:
             nonlocal prev_hash, prev_bytes
-            h = _hlib.md5(f[::16, ::16].tobytes()).digest()
-            if h == prev_hash and prev_bytes:
+            frame_hash = hashlib.md5(frame[::16, ::16].tobytes()).digest()
+            if frame_hash == prev_hash and prev_bytes:
                 enc_proc.stdin.write(prev_bytes)
             else:
-                raw = f.tobytes()
+                raw = frame.tobytes()
                 enc_proc.stdin.write(raw)
-                prev_hash, prev_bytes = h, raw
+                prev_hash, prev_bytes = frame_hash, raw
 
-        # Write intro frames first (3.5s @ 12fps = 42 frames)
-        # These have NO word timings — pure branding
-        for f in intro_frames:
-            write_frame(f)
-        
-        # Offset all word timings by intro duration so subtitles sync correctly
-        INTRO_OFFSET_MS = int(len(intro_frames) / 12 * 1000)  # intro always 12fps = 3500ms
-        for i, timing in enumerate(narration_bundle.all_word_timings):
-            narration_bundle.all_word_timings[i] = timing.model_copy(
+        for frame in intro_frames:
+            write_frame(frame)
+
+        offset_ms = intro_offset_ms()
+        for index, timing in enumerate(narration_bundle.all_word_timings):
+            narration_bundle.all_word_timings[index] = timing.model_copy(
                 update={
-                    "start_ms": timing.start_ms + INTRO_OFFSET_MS,
-                    "end_ms":   timing.end_ms   + INTRO_OFFSET_MS,
+                    "start_ms": timing.start_ms + offset_ms,
+                    "end_ms": timing.end_ms + offset_ms,
                 }
             )
 
-        for batch_i, batch in enumerate(all_frame_batches):
-            is_last = batch_i == len(all_frame_batches) - 1
-            beat = beats[batch_i]
-            # Build lower-third subtitle: protagonist + role
-            lt_subtitle = beat.on_screen_text or beat.situation[:30] if hasattr(beat, 'situation') else ""
+        lower_third_frame_limit = int(3 * RENDER_FPS)
 
-            # Lower-third only on hook + first beat (not all 2100 frames)
-            _show_lower_third = (batch_i == 0)
+        for batch_index, batch in enumerate(all_frame_batches):
+            beat = beats[batch_index]
+            situation_text = topic.situation[:30] if topic.situation else ""
+            lt_subtitle = beat.on_screen_text or situation_text
+            show_lower_third = batch_index == 0
 
-            def _write_batch_frames(frames, start_fi=0):
-                """Write frames, lower-third only on hook beat."""
-                for fi, f in enumerate(frames):
-                    if _show_lower_third and (start_fi + fi) < 36:  # first 3s
+            def write_batch_frames(frames, start_frame_index=0):
+                for frame_index, frame in enumerate(frames):
+                    if show_lower_third and (start_frame_index + frame_index) < lower_third_frame_limit:
                         try:
-                            pil_f = Image.fromarray(f)
-                            pil_f = render_lower_third(
-                                pil_f,
-                                protagonist       = beat.protagonist,
-                                subtitle          = lt_subtitle,
-                                beat_frame        = start_fi + fi,
-                                total_beat_frames = len(batch),
-                                fps               = 12,
+                            pil_frame = Image.fromarray(frame)
+                            pil_frame = render_lower_third(
+                                pil_frame,
+                                protagonist=beat.protagonist,
+                                subtitle=lt_subtitle,
+                                beat_frame=start_frame_index + frame_index,
+                                total_beat_frames=len(batch),
+                                fps=RENDER_FPS,
                             )
-                            f = np.array(pil_f)
-                        except Exception:
-                            pass
-                    write_frame(f)
+                            frame = np.array(pil_frame)
+                        except Exception as exc:
+                            log.warning("Lower-third render failed: %s", exc)
+                    write_frame(frame)
 
-            if batch_i > 0:
-                prev_batch = all_frame_batches[batch_i - 1]
-                tail = prev_batch[-TRANSITION_FRAMES:] if len(prev_batch) >= TRANSITION_FRAMES else prev_batch
-                head = batch[:TRANSITION_FRAMES]
-                for ti in range(min(len(tail), len(head), TRANSITION_FRAMES)):
-                    t_progress = (ti + 1) / TRANSITION_FRAMES
-                    blended = render_transition(tail[ti], head[ti], t_progress, style="flipbook")
+            if batch_index > 0:
+                previous_batch = all_frame_batches[batch_index - 1]
+                tail = (
+                    previous_batch[-transition_frames:]
+                    if len(previous_batch) >= transition_frames
+                    else previous_batch
+                )
+                head = batch[:transition_frames]
+                for transition_index in range(min(len(tail), len(head), transition_frames)):
+                    transition_progress = (transition_index + 1) / transition_frames
+                    blended = render_transition(
+                        tail[transition_index], head[transition_index],
+                        transition_progress, style="flipbook",
+                    )
                     write_frame(blended)
-                # Write rest of batch WITH lower-third
-                _write_batch_frames(batch[TRANSITION_FRAMES:], start_fi=TRANSITION_FRAMES)
+                write_batch_frames(batch[transition_frames:], start_frame_index=transition_frames)
             else:
-                _write_batch_frames(batch)
+                write_batch_frames(batch)
 
         enc_proc.stdin.close()
-        enc_proc.wait()
+        encode_return_code = enc_proc.wait()
+        if encode_return_code != 0:
+            raise RuntimeError(f"Raw video encoding failed (exit code {encode_return_code})")
         log.info("Raw video encoded")
 
-        # ── 8. Align duration to audio ────────────────────────────────
-        # Total video duration = intro + narration
-        total_video_s = (len(intro_frames) / 12) + narration_bundle.total_duration_seconds
-        log.info("Video duration: intro=%.1fs + audio=%.1fs = total=%.1fs",
-                 len(intro_frames)/12, narration_bundle.total_duration_seconds, total_video_s)
+        total_video_seconds = INTRO_DURATION_S + narration_bundle.total_duration_seconds
+        log.info(
+            "Video duration: intro=%.1fs + audio=%.1fs = total=%.1fs",
+            INTRO_DURATION_S,
+            narration_bundle.total_duration_seconds,
+            total_video_seconds,
+        )
         aligned_path = run_dir / "aligned.mp4"
         self.video_renderer.align_video_duration(
             raw_video_path,
-            total_video_s,
+            total_video_seconds,
             aligned_path,
         )
 
-        # ── 9. BGM + mux audio ────────────────────────────────────────
         dominant_emotion = max(
-            set(b.emotion for b in beats),
-            key=lambda e: sum(1 for b in beats if b.emotion == e)
+            set(beat.emotion for beat in beats),
+            key=lambda emotion: sum(1 for beat in beats if beat.emotion == emotion),
         )
         emotions_cfg = load_emotions_config()
         bgm_volume = float(emotions_cfg.get(dominant_emotion, {}).get("bgm_volume", 0.06))
@@ -277,13 +366,14 @@ class VideoPipelineV3:
             muxed_path,
             bgm_path,
             bgm_volume=bgm_volume,
+            intro_delay_seconds=INTRO_DURATION_S,
+            strict=True,
         )
 
-        # ── 10. Subtitles ─────────────────────────────────────────────
         log.info("Step 10: subtitles...")
         final_path = run_dir / "video.mp4"
-        srt_path   = run_dir / "subtitles.srt"
-        ass_path   = run_dir / "subtitles.ass"
+        srt_path = run_dir / "subtitles.srt"
+        ass_path = run_dir / "subtitles.ass"
         try:
             srt_path = self.subtitle_engine.write_srt(
                 narration_bundle.all_word_timings, srt_path)
@@ -291,23 +381,21 @@ class VideoPipelineV3:
                 narration_bundle.all_word_timings, ass_path)
             self.subtitle_engine.burn_ass_into_video(
                 muxed_path, ass_path, final_path,
-                word_timings=narration_bundle.all_word_timings, fps=12)
-            log.info("✅ Subtitles burned")
-        except Exception as e:
-            log.warning("Subtitle step failed (%s) — copying muxed as final", e)
-            import shutil; shutil.copy(muxed_path, final_path)
+                word_timings=narration_bundle.all_word_timings, fps=RENDER_FPS)
+            log.info("Subtitles burned")
+        except Exception as exc:
+            log.warning("Subtitle step failed (%s) — copying muxed as final", exc)
+            shutil.copy(muxed_path, final_path)
             srt_path.write_text("", encoding="utf-8")
 
-        # ── 11. Metadata + thumbnail ──────────────────────────────────
         log.info("Step 11: metadata + thumbnail...")
-        chapters = [{"time": "00:00:00", "title": b.beat_type.value} for b in beats]
+        chapters = [{"time": "00:00:00", "title": beat.beat_type.value} for beat in beats]
         try:
             metadata = self.metadata_gen.generate(topic, beats, chapters)
-            log.info("✅ Metadata done: %s", metadata.title_ta[:40])
-        except Exception as e:
-            log.warning("Metadata failed (%s) — offline", e)
-            from src.seo.metadata_generator import MetadataGenerator as MG
-            metadata = MG()._offline(topic, "", beats)
+            log.info("Metadata done: %s", metadata.title_ta[:40])
+        except Exception as exc:
+            log.warning("Metadata failed (%s) — offline", exc)
+            metadata = MetadataGenerator()._offline(topic, "", beats)
 
         try:
             thumb_path = self.thumbnail_gen.generate(
@@ -315,67 +403,22 @@ class VideoPipelineV3:
                 hook_frame=hook_frame,
                 thumbnail_text=metadata.thumbnail_text,
                 emotion_trigger=metadata.emotion_trigger)
-            log.info("✅ Thumbnail done")
-        except Exception as e:
-            log.warning("Thumbnail failed (%s) — blank", e)
-            from PIL import Image as _PILImg
+            log.info("Thumbnail done")
+        except Exception as exc:
+            log.warning("Thumbnail failed (%s) — blank", exc)
             thumb_path = run_dir / "thumbnail.jpg"
-            _PILImg.new("RGB", (1280, 720), (29, 48, 16)).save(thumb_path)
+            Image.new("RGB", (1280, 720), (29, 48, 16)).save(thumb_path)
 
-        # ── 12. Upload ────────────────────────────────────────────────
         log.info("Step 12: upload (skip=%s)...", skip_upload)
         slug = hashlib.md5(topic.title_ta.encode()).hexdigest()[:12]
         if not skip_upload:
             try:
                 result = self.uploader.upload(
                     final_path, thumb_path, metadata, topic, slug)
-                log.info("✅ Uploaded: %s", result.get("youtube_url", "?"))
-            except Exception as e:
-                log.error("❌ Upload FAILED: %s", e)
-                import traceback; traceback.print_exc()
+                log.info("Uploaded: %s", result.get("youtube_url", "?"))
+            except Exception as exc:
+                log.error("Upload FAILED: %s", exc)
                 raise
-        # ── 13. Shorts ───────────────────────────────────────────────
-        if include_shorts and not skip_upload:
-            log.info("Step 13: generating Shorts...")
-            try:
-                hook_beat      = beats[0]
-                hook_seg       = narration_bundle.segments[0]
-                hook_image     = beat_images.get(0)
-                shorts_path    = run_dir / "shorts.mp4"
-                shorts_audio   = Path(hook_seg.audio_path)
-                generate_shorts(
-                    hook_narration = hook_beat.narration_ta,
-                    hook_audio_path= shorts_audio,
-                    hook_image     = hook_image,
-                    protagonist    = topic.protagonist,
-                    output_path    = shorts_path,
-                    duration_s     = min(hook_seg.duration_seconds + 2, 55.0),
-                )
-                # Upload Shorts
-                # Clean shorts title — full title without truncation
-                shorts_title = topic.title_ta if len(topic.title_ta) <= 70 else topic.title_ta[:67] + "..."
-                shorts_slug  = slug + "_s"
-                from src.uploader.youtube_publisher import YouTubePublisher as _YTP
-                shorts_meta  = metadata.__class__(
-                    title_ta       = shorts_title,
-                    title_options  = [shorts_title],
-                    description_ta = (metadata.description_ta or "") + "\n\n#Shorts #துளிர் #TamilShorts",
-                    tags           = (metadata.tags or []) + ["Shorts","YouTube Shorts","Tamil Shorts"],
-                    thumbnail_text = metadata.thumbnail_text,
-                    emotion_trigger= metadata.emotion_trigger,
-                )
-                self.uploader.upload(shorts_path, thumb_path, shorts_meta, topic, shorts_slug)
-                log.info("✅ Shorts uploaded")
-                package = package.model_copy(update={"shorts_video_path": str(shorts_path)})
-            except Exception as e:
-                log.warning("Shorts generation/upload failed: %s", e)
-
-        self.topic_scorer.record_topic(topic)
-        if daily_slot:
-            try:
-                self.scheduler.mark_slot_complete(DailySlot(daily_slot), run_id)
-            except Exception:
-                pass
 
         package = VideoPackage(
             run_id=run_id,
@@ -387,15 +430,83 @@ class VideoPipelineV3:
             metadata=metadata,
             format="long",
         )
-        try:
-            (run_dir / "manifest.json").write_text(
-                package.model_dump_json(indent=2))
-        except Exception as e:
-            log.warning("Manifest write failed (%s) — skipping", e)
-            import json as _json
-            (run_dir / "manifest.json").write_text(_json.dumps({
-                "run_id": run_id, "topic": topic.title_ta,
-                "video": str(final_path), "format": "long"
-            }, ensure_ascii=False))
+
+        if include_shorts:
+            package = self._generate_and_upload_shorts(
+                package, beats, narration_bundle, beat_images, topic, skip_upload, run_dir, run_id
+            )
+
+        self._finalize_run(topic, daily_slot, run_id)
+        self._write_manifest(run_dir, package)
         log.info("Run %s complete — %s", run_id, final_path)
         return package
+
+    def _generate_and_upload_shorts(
+        self,
+        package: VideoPackage,
+        beats,
+        narration_bundle,
+        beat_images,
+        topic: TopicCandidate,
+        skip_upload: bool,
+        run_dir: Path,
+        run_id: str,
+    ) -> VideoPackage:
+        log.info("Step 13: generating Shorts...")
+        try:
+            hook_beat = beats[0]
+            hook_segment = narration_bundle.segments[0]
+            hook_image = beat_images.get(0)
+            shorts_path = run_dir / "shorts.mp4"
+            generate_shorts(
+                hook_narration=hook_beat.narration_ta,
+                hook_audio_path=Path(hook_segment.audio_path),
+                hook_image=hook_image,
+                protagonist=topic.protagonist,
+                output_path=shorts_path,
+                duration_s=min(hook_segment.duration_seconds + 2, 55.0),
+            )
+            package = package.model_copy(update={"shorts_video_path": str(shorts_path)})
+
+            if not skip_upload:
+                shorts_slug = hashlib.md5(
+                    f"{topic.title_ta}-shorts-{run_id}".encode()
+                ).hexdigest()[:12]
+                assert package.metadata is not None
+                self.uploader.upload_shorts(
+                    shorts_path, package.metadata, topic, shorts_slug
+                )
+                log.info("Shorts uploaded")
+        except Exception as exc:
+            if skip_upload:
+                log.warning("Shorts generation failed: %s", exc)
+            else:
+                log.error("Shorts generation/upload failed: %s", exc)
+                raise
+        return package
+
+    def _finalize_run(
+        self,
+        topic: TopicCandidate,
+        daily_slot: Optional[str],
+        run_id: str,
+    ) -> None:
+        self.topic_scorer.record_topic(topic)
+        if daily_slot:
+            try:
+                self.scheduler.mark_slot_complete(DailySlot(daily_slot), run_id)
+            except ValueError as exc:
+                log.warning("Unknown daily slot: %s", exc)
+
+    def _write_manifest(self, run_dir: Path, package: VideoPackage) -> None:
+        manifest_path = run_dir / "manifest.json"
+        try:
+            manifest_path.write_text(package.model_dump_json(indent=2))
+        except Exception as exc:
+            log.warning("Manifest write failed (%s) — skipping", exc)
+            manifest_path.write_text(json.dumps({
+                "run_id": package.run_id,
+                "topic": package.topic.title_ta,
+                "video": package.long_video_path,
+                "format": package.format,
+            }, ensure_ascii=False))
