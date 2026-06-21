@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 _EN_TO_TA: list[tuple[str, str]] = [
     # People
     (r"\bColonel Sanders\b",  "கர்னல் சாண்டர்ஸ்"),
+    (r"\bHarland Sanders\b",  "ஹார்லாண்ட் சாண்டர்ஸ்"),
     (r"\bSteve Jobs\b",       "ஸ்டீவ் ஜாப்ஸ்"),
     (r"\bElon Musk\b",        "எலான் மஸ்க்"),
     (r"\bAbdul Kalam\b",      "அப்துல் கலாம்"),
@@ -37,6 +38,14 @@ _EN_TO_TA: list[tuple[str, str]] = [
     (r"\bNarayana Murthy\b",  "நாராயண மூர்த்தி"),
     (r"\bRatan Tata\b",       "ரத்தன் டாட்டா"),
     (r"\bDhirubhai Ambani\b", "திருபாய் அம்பானி"),
+    (r"\bSundar Pichai\b",    "சுந்தர் பிச்சை"),
+    (r"\bByju Raveendran\b",  "பைஜூ ரவீந்திரன்"),
+    (r"\bBYJU\b",             "பைஜூ"),
+    (r"\bBYJU'S\b",          "பைஜூஸ்"),
+    (r"\bForbes\b",           "ஃபோர்ப்ஸ்"),
+    (r"\bBlackboard\b",       "கரும்பலகை"),
+    (r"\bStartup\b",          "தொழில்முனைவு"),
+    (r"\bstart-up\b",         "தொழில்முனைவு"),
     # Companies
     (r"\bNokia\b",     "நோக்கியா"),
     (r"\bApple\b",     "ஆப்பிள்"),
