@@ -1,6 +1,14 @@
 provider: edge_tts
-default_voice: ta-IN-ValluvarNeural
+
+# PallaviNeural (female) — much clearer Tamil, better English handling
+# ValluvarNeural (male) — deeper but struggles with English proper nouns
+default_voice: ta-IN-PallaviNeural
 female_voice: ta-IN-PallaviNeural
-rate: "+0%"
+
+# Rate: -15% = noticeably slower = much clearer for viewers
+# This is the key setting for clarity
+rate: "-15%"
 pitch: "+0Hz"
-pause_between_beats_ms: 400
+
+# Longer pause between beats = breathing room = natural storytelling
+pause_between_beats_ms: 600
