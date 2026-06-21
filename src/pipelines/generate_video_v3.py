@@ -118,7 +118,7 @@ class VideoPipelineV3:
         log.info("Images ready: %d", len(beat_images))
 
         # ── 6. Render all scenes ──────────────────────────────────────
-        log.info("Rendering frames (12fps, PIL only)...")
+        log.info("Rendering frames (8fps → 24fps output, PIL only)...")
         all_frame_batches: List[List[np.ndarray]] = []
         hook_frame = None
 
@@ -189,7 +189,8 @@ class VideoPipelineV3:
             write_frame(f)
         
         # Offset all word timings by intro duration so subtitles sync correctly
-        INTRO_OFFSET_MS = int(len(intro_frames) / 12 * 1000)  # ~3500ms
+        RENDER_FPS = 8  # must match fps passed to render_scene_frames
+        INTRO_OFFSET_MS = int(len(intro_frames) / RENDER_FPS * 1000)  # 42frames/8fps = 5250ms
         for i, timing in enumerate(narration_bundle.all_word_timings):
             narration_bundle.all_word_timings[i] = timing.model_copy(
                 update={
