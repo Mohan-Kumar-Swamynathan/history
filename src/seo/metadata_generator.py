@@ -158,12 +158,14 @@ class MetadataGenerator:
         return "\n".join(ts)
 
     def _format_chapters(self, beats) -> str:
-        labels = ["🎣 Hook","📖 Setup","⚡ Conflict","🔥 Worst Point","💡 Turning Point","✅ Resolution","🌱 Lesson"]
+        labels = ["🎣 தொடக்கம்","📖 பின்னணி","⚡ சோதனை","🔥 கடினமான தருணம்",
+                  "💡 திருப்புமுனை","✅ வெற்றி","🌱 பாடம்"]
         lines  = []
-        ms     = 0
+        # Offset by intro duration (3.5s)
+        ms     = 3500
         for i, beat in enumerate(beats):
             mins, secs = divmod(ms // 1000, 60)
-            label = labels[i] if i < len(labels) else f"Part {i+1}"
+            label = labels[i] if i < len(labels) else f"பகுதி {i+1}"
             lines.append(f"{mins:02d}:{secs:02d} {label}")
             dur = int(getattr(beat, 'duration_seconds', 45) * 1000)
             ms += dur
