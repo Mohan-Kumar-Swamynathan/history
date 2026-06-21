@@ -352,7 +352,8 @@ class VideoPipelineV3:
                     duration_s     = min(hook_seg.duration_seconds + 2, 55.0),
                 )
                 # Upload Shorts
-                shorts_title = f"{topic.title_ta[:50]} #Shorts"
+                # Clean shorts title — full title without truncation
+                shorts_title = topic.title_ta if len(topic.title_ta) <= 70 else topic.title_ta[:67] + "..."
                 shorts_slug  = slug + "_s"
                 from src.uploader.youtube_publisher import YouTubePublisher as _YTP
                 shorts_meta  = metadata.__class__(
