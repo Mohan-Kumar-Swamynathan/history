@@ -121,7 +121,7 @@ class MetadataGenerator:
         desc = (
             f"🌱 துளிர் — உண்மையான கதைகள். உண்மையான பாடங்கள்.\n\n"
             f"{hook_q}\n\n"
-            f"இந்த video-ல்:\n"
+            f"இந்த வீடியோவில்:\n"
             f"✅ {protagonist}-ன் உண்மையான கதை\n"
             f"✅ {lesson}\n\n"
             f"{chapters_text}\n\n"
