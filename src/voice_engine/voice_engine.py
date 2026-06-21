@@ -36,6 +36,27 @@ _EN_TO_TA: list[tuple[str, str]] = [
     (r"\bJeff Bezos\b",       "ஜெஃப் பெசோஸ்"),
     (r"\bWarren Buffett\b",   "வாரன் பஃபெட்"),
     (r"\bNarayana Murthy\b",  "நாராயண மூர்த்தி"),
+    # EdTech / Indian brands
+    (r"\bBYJU['']?S?\b",      "பைஜூஸ்"),
+    (r"\bBYJU\b",             "பைஜூ"),
+    (r"\bRaveendran\b",       "ரவீந்திரன்"),
+    (r"\bBlackboard\b",       "கரும்பலகை"),
+    (r"\bForbes\b",           "ஃபோர்ப்ஸ்"),
+    (r"\bStartup\b",          "தொடக்க நிறுவனம்"),
+    (r"\bUnicorn\b",          "யூனிகார்ன்"),
+    (r"\bValuation\b",        "மதிப்பீடு"),
+    (r"\bBillionaire\b",      "பில்லியனர்"),
+    (r"\bEdTech\b",           "கல்வி தொழில்நுட்பம்"),
+    (r"\bInfosys\b",          "இன்ஃபோசிஸ்"),
+    (r"\bWipro\b",            "விப்ரோ"),
+    (r"\bFlipkart\b",         "ஃப்ளிப்கார்ட்"),
+    (r"\bZomato\b",           "ஜொமாட்டோ"),
+    (r"\bOla\b",              "ஓலா"),
+    (r"\bPaytm\b",            "பேட்டிஎம்"),
+    (r"\bTata\b",             "டாடா"),
+    (r"\bAmbani\b",           "அம்பானி"),
+    (r"\bAdani\b",            "அடானி"),
+    (r"\bMurthy\b",           "மூர்த்தி"),
     (r"\bRatan Tata\b",       "ரத்தன் டாட்டா"),
     (r"\bDhirubhai Ambani\b", "திருபாய் அம்பானி"),
     (r"\bSundar Pichai\b",    "சுந்தர் பிச்சை"),
@@ -160,7 +181,7 @@ class VoiceEngine:
             # PallaviNeural handles Tamil+English mixing better than ValluvarNeural
             self.voice = voice_config.get("default_voice", "ta-IN-PallaviNeural")
         # Slightly slower rate improves clarity on proper nouns and numbers
-        self.rate  = voice_config.get("rate",  "-8%")
+        self.rate  = voice_config.get("rate",  "-15%")   # voice.yml default
         self.pitch = voice_config.get("pitch", "+0Hz")
         self.pause_between_beats_ms = int(voice_config.get("pause_between_beats_ms", 500))
 
