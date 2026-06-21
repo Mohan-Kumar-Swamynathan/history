@@ -118,6 +118,7 @@ class VideoPipelineV3:
         log.info("Images ready: %d", len(beat_images))
 
         # ── 6. Render all scenes ──────────────────────────────────────
+        RENDER_FPS = 8   # render at 8fps — 33% fewer PIL frames
         log.info("Rendering frames (8fps → 24fps output, PIL only)...")
         all_frame_batches: List[List[np.ndarray]] = []
         hook_frame = None
@@ -158,7 +159,6 @@ class VideoPipelineV3:
         raw_video_path = run_dir / "raw_video.mp4"
 
         import subprocess
-        RENDER_FPS = 8   # render at 8fps — 33% fewer PIL frames
         enc_cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "rawvideo", "-vcodec", "rawvideo",
