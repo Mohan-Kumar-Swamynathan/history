@@ -163,9 +163,9 @@ class VideoPipelineV3:
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "rawvideo", "-vcodec", "rawvideo",
             "-s", "1920x1080", "-pix_fmt", "rgb24",
-            "-r", str(RENDER_FPS),   # input: 8fps raw frames
+            "-r", str(RENDER_FPS),   # input raw fps
             "-i", "pipe:0",
-            "-r", "24",              # output: 24fps (YouTube standard)
+            "-vf", f"fps=24",        # duplicate frames to 24fps (smooth playback)
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-pix_fmt", "yuv420p",
             str(raw_video_path),
@@ -192,7 +192,7 @@ class VideoPipelineV3:
             write_frame(f)
         
         # Offset all word timings by intro duration so subtitles sync correctly
-        INTRO_OFFSET_MS = int(len(intro_frames) / RENDER_FPS * 1000)  # 42frames/8fps = 5250ms
+        INTRO_OFFSET_MS = int(len(intro_frames) / 12 * 1000)  # intro always 12fps = 3500ms
         for i, timing in enumerate(narration_bundle.all_word_timings):
             narration_bundle.all_word_timings[i] = timing.model_copy(
                 update={
@@ -247,10 +247,14 @@ class VideoPipelineV3:
         log.info("Raw video encoded")
 
         # ── 8. Align duration to audio ────────────────────────────────
+        # Total video duration = intro + narration
+        total_video_s = (len(intro_frames) / 12) + narration_bundle.total_duration_seconds
+        log.info("Video duration: intro=%.1fs + audio=%.1fs = total=%.1fs",
+                 len(intro_frames)/12, narration_bundle.total_duration_seconds, total_video_s)
         aligned_path = run_dir / "aligned.mp4"
         self.video_renderer.align_video_duration(
             raw_video_path,
-            narration_bundle.total_duration_seconds,
+            total_video_s,
             aligned_path,
         )
 
