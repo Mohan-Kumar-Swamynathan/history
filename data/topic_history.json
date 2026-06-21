@@ -34,5 +34,33 @@
     "protagonist": "Kiran Mazumdar-Shaw",
     "content_bucket": "business",
     "fingerprint": "ஒர பணணன பரடடம இநதயவன உயரண சகதர"
+  },
+  {
+    "protagonist": "BYJU Raveendran",
+    "title_ta": "ஒரே ஆசிரியர் இந்தியாவின் கல்வியில் புரட்சி!",
+    "content_bucket": "business",
+    "recorded_at": "2026-06-21T06:58:00",
+    "fingerprint": "byju raveendran"
+  },
+  {
+    "protagonist": "Ratan Tata",
+    "title_ta": "Ratan Tata — எல்லோரும் சிரித்த Nano car-ன் கதை",
+    "content_bucket": "business",
+    "recorded_at": "2026-06-20T15:28:00",
+    "fingerprint": "ratan tata nano"
+  },
+  {
+    "protagonist": "Sundar Pichai",
+    "title_ta": "Sundar Pichai — Madurai-ல் தொடங்கி Google CEO",
+    "content_bucket": "success_failure",
+    "recorded_at": "2026-06-20T13:21:00",
+    "fingerprint": "sundar pichai madurai"
+  },
+  {
+    "protagonist": "Dhirubhai Ambani",
+    "title_ta": "Dhirubhai Ambani — ₹500 சம்பளத்திலிருந்து",
+    "content_bucket": "success_failure",
+    "recorded_at": "2026-06-20T12:24:00",
+    "fingerprint": "dhirubhai ambani 500"
   }
 ]
