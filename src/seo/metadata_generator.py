@@ -119,16 +119,19 @@ class MetadataGenerator:
         # Description with timestamps
         chapters_text = self._format_chapters(beats)
         desc = (
-            f"🌱 துளிர் — உண்மையான கதைகள். உண்மையான பாடங்கள்.\n\n"
             f"{hook_q}\n\n"
+            f"🌱 துளிர் — உண்மையான கதைகள். உண்மையான பாடங்கள்.\n\n"
             f"இந்த வீடியோவில்:\n"
             f"✅ {protagonist}-ன் உண்மையான கதை\n"
             f"✅ {lesson}\n\n"
-            f"{chapters_text}\n\n"
-            f"👍 Like செய்யுங்கள் | 🔔 Subscribe செய்யுங்கள் | 💬 Comment பண்ணுங்கள்\n\n"
-            f"#thuLir #TamilStorytelling #தமிழ் #{protagonist.replace(' ','')}"
+            f"⏱️ நேரடி அட்டவணை:\n{chapters_text}\n\n"
+            f"👍 லைக் செய்யுங்கள் | 🔔 சந்தா செய்யுங்கள் | 💬 கருத்து சொல்லுங்கள்\n\n"
+            f"📺 எங்கள் மற்ற சேனல்கள்:\n"
+            f"🕉️ பக்தி கதைகள் → youtube.com/@aalayamani\n"
+            f"💰 நிதி உதவி → youtube.com/@nidhineethi\n"
+            f"🚗 கார் செய்திகள் → youtube.com/@cartamiltv\n\n"
+            f"#துளிர் #TamilStorytelling #தமிழ்கதைகள் #TamilYouTube #MotivationalTamil"
         )
-
         tags = _default_tags(protagonist, topic.content_bucket.value if hasattr(topic, 'content_bucket') else "")
         return VideoMetadata(
             title_ta        = title,
