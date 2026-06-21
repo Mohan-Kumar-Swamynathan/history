@@ -195,18 +195,27 @@ def _clean_tags(tags: list) -> list:
 
 def _default_tags(protagonist: str, bucket: str) -> list:
     base = [
-        "thulir", "tamil storytelling", "tamil history", "tamil motivation",
+        "thulir", "tamil storytelling", "tamil motivation 2026",
         "true story tamil", "real stories tamil", "almost everything tamil",
-        "tamil youtube", "interesting facts tamil", "tamil documentary",
+        "tamil youtube 2026", "interesting facts tamil", "tamil documentary",
+        "motivational stories tamil", "biography tamil", "success stories tamil",
+        "thuLir stories", "tamil history stories", "inspired by real events tamil",
     ]
     p_en = protagonist.encode("ascii","ignore").decode().strip()
     if p_en:
-        base = [p_en, p_en.lower().replace(" ",""), f"{p_en} story"] + base
+        base = [p_en, p_en.lower().replace(" ",""), f"{p_en} story tamil",
+                f"{p_en} biography", f"{p_en} success story"] + base
     bucket_tags = {
-        "business":         ["business failure", "company story", "entrepreneur story"],
-        "historical_story": ["history story", "world history", "forgotten history"],
-        "success_failure":  ["success story", "failure to success", "rags to riches"],
-        "psychology":       ["psychology facts", "human behavior", "mind facts"],
+        "business":         ["business failure tamil", "company story tamil",
+                             "entrepreneur story tamil", "startup failure success"],
+        "historical_story": ["history story tamil", "world history tamil",
+                             "forgotten history", "historical facts tamil"],
+        "success_failure":  ["success story tamil", "failure to success tamil",
+                             "rags to riches tamil", "never give up tamil"],
+        "psychology":       ["psychology facts tamil", "human behavior tamil",
+                             "interesting facts tamil", "mind facts"],
+        "science":          ["science facts tamil", "invention story tamil",
+                             "scientist biography tamil"],
     }
     base += bucket_tags.get(bucket, [])
     return _clean_tags(base)[:30]
