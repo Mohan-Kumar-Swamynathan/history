@@ -212,10 +212,40 @@ class VoiceEngine:
         import edge_tts
 
         communicate = edge_tts.Communicate(text, self.voice, rate=self.rate, pitch=self.pitch)
-        await communicate.save(str(output_path))
+
+        # Collect real word boundary events from edge-tts
+        real_timings: List[WordTiming] = []
+        audio_chunks = []
+
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_chunks.append(chunk["data"])
+            elif chunk["type"] == "WordBoundary":
+                # edge-tts gives offset in 100-nanosecond units
+                start_ms = chunk["offset"] // 10000
+                dur_ms   = chunk["duration"] // 10000
+                word     = chunk.get("text", "")
+                if word.strip():
+                    real_timings.append(WordTiming(
+                        word=word,
+                        start_ms=start_ms,
+                        end_ms=start_ms + dur_ms,
+                    ))
+
+        # Write audio file
+        with open(str(output_path), "wb") as f:
+            for chunk in audio_chunks:
+                f.write(chunk)
+
         duration_seconds = self._get_audio_duration(output_path)
-        word_timings = self._build_word_timings_from_audio(text, duration_seconds)
-        return duration_seconds, word_timings
+
+        # Use real timings if available, else fall back to estimate
+        if real_timings:
+            log.info("Real word timings: %d words for beat", len(real_timings))
+            return duration_seconds, real_timings
+
+        log.warning("No word boundaries from edge-tts — using estimate")
+        return duration_seconds, self._build_word_timings_from_audio(text, duration_seconds)
 
     def _build_word_timings_from_audio(self, text: str, duration_seconds: float) -> List[WordTiming]:
         words = re.findall(r"\S+", text)
