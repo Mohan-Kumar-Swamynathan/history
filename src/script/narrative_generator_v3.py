@@ -96,9 +96,11 @@ SCRIPT STRUCTURE (7 beats, mandatory order):
 WRITING RULES:
 - Each beat: {min_words}-{max_words} Tamil words MAXIMUM (2-3 short sentences)
 - LANGUAGE: 100% PURE TAMIL. Every single word must be Tamil.
-  STRICTLY FORBIDDEN: IIT, Stanford, Google, Harvard, CEO, MBA, startup, company, Kharagpur,
-  scholarship, fees, graduate, rejected, failed, success, business, phone, online, offline,
-  poverty, freedom, victory, professor, director, engineer — ALL English words forbidden.
+  STRICTLY FORBIDDEN (every single one): IIT, Stanford, Google, Harvard, CEO, MBA,
+  startup, company, Kharagpur, scholarship, fees, graduate, rejected, failed, success,
+  business, phone, online, offline, BYJU, Raveendran, Forbes, Blackboard, EdTech,
+  professor, director, engineer, platform, market, product, brand, launch, revenue —
+  ALL English words forbidden. Write as if your reader knows ZERO English.
   USE INSTEAD: ஐஐடி, ஸ்டான்போர்டு, கூகுள், ஹார்வர்டு, தலைமை நிர்வாகி, எம்பிஏ,
   தொழில், நிறுவனம், கட்டணம், பட்டதாரி, நிராகரிக்கப்பட்டார், தோல்வி,
   வெற்றி, வணிகம், தொலைபேசி, கல்வி உதவித்தொகை
