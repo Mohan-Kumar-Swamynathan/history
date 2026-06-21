@@ -131,7 +131,7 @@ class VideoPipelineV3:
                 image_panel    = image_panel,
                 duration_s     = beat.duration_seconds,
                 word_timings   = seg.word_timings,
-                fps            = 8,
+                fps            = RENDER_FPS,
                 scene_idx      = i,
             )
 
@@ -158,11 +158,14 @@ class VideoPipelineV3:
         raw_video_path = run_dir / "raw_video.mp4"
 
         import subprocess
+        RENDER_FPS = 8   # render at 8fps — 33% fewer PIL frames
         enc_cmd = [
             "ffmpeg", "-y", "-loglevel", "error",
             "-f", "rawvideo", "-vcodec", "rawvideo",
-            "-s", "1920x1080", "-pix_fmt", "rgb24", "-r", "12",
+            "-s", "1920x1080", "-pix_fmt", "rgb24",
+            "-r", str(RENDER_FPS),   # input: 8fps raw frames
             "-i", "pipe:0",
+            "-r", "24",              # output: 24fps (YouTube standard)
             "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
             "-pix_fmt", "yuv420p",
             str(raw_video_path),
@@ -189,7 +192,6 @@ class VideoPipelineV3:
             write_frame(f)
         
         # Offset all word timings by intro duration so subtitles sync correctly
-        RENDER_FPS = 8  # must match fps passed to render_scene_frames
         INTRO_OFFSET_MS = int(len(intro_frames) / RENDER_FPS * 1000)  # 42frames/8fps = 5250ms
         for i, timing in enumerate(narration_bundle.all_word_timings):
             narration_bundle.all_word_timings[i] = timing.model_copy(
