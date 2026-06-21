@@ -307,7 +307,7 @@ Return ONLY the Tamil narration text, no JSON."""
             for bt, key, vk in structure:
                 text = prewritten.get(key, "")
                 if text:
-                    beats.append(beat(bt, text, vk))
+                    beats.append(beat(bt, _purify_tamil(text), vk))
             if len(beats) == 7:
                 return NarrativeScript(topic=topic, beats=beats, format="long")
 
