@@ -415,7 +415,10 @@ class VideoPipelineV3:
             try:
                 result = self.uploader.upload(
                     final_path, thumb_path, metadata, topic, slug)
-                log.info("Uploaded: %s", result.get("youtube_url", "?"))
+                yt_url = result.get("youtube_url","") if isinstance(result,dict) else ""
+                log.info("Uploaded: %s", yt_url)
+                try: package = package.model_copy(update={"youtube_url": yt_url})
+                except: pass
             except Exception as exc:
                 log.error("Upload FAILED: %s", exc)
                 raise
