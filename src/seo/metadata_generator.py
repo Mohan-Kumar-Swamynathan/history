@@ -94,7 +94,7 @@ class MetadataGenerator:
             title_ta        = data.get("best_title", titles[0] if titles else topic.title_ta),
             title_options   = titles[:10],
             description_ta  = desc,
-            tags            = _clean_tags(data.get("tags", [])),
+            tags            = _clean_tags(data.get("tags", []) or SAFE_DEFAULT_TAGS),
             thumbnail_text  = data.get("thumbnail_text", _extract_hook_text(topic.title_ta)),
             emotion_trigger = data.get("emotion_trigger", "surprise"),
             pinned_comment  = data.get("pinned_comment", self._default_pin(topic)),
@@ -132,7 +132,7 @@ class MetadataGenerator:
             f"🚗 கார் செய்திகள் → youtube.com/@cartamiltv\n\n"
             f"#துளிர் #TamilStorytelling #தமிழ்கதைகள் #TamilYouTube #MotivationalTamil"
         )
-        tags = _default_tags(protagonist, topic.content_bucket.value if hasattr(topic, 'content_bucket') else "")
+        tags = _clean_tags(_default_tags(protagonist, topic.content_bucket.value if hasattr(topic, 'content_bucket') else "") + SAFE_DEFAULT_TAGS)
         return VideoMetadata(
             title_ta        = title,
             title_options   = title_variants,
@@ -186,17 +186,41 @@ class MetadataGenerator:
 
 
 def _clean_tags(tags: list) -> list:
-    """Ensure all tags are ASCII (YouTube API requires it)."""
+    """Strip ALL non-ASCII from tags — YouTube API HTTP 400 on Tamil script.
+    
+    YouTube tags MUST be ASCII only. Any Unicode character (Tamil, emoji, etc.)
+    causes: 'The request metadata specifies invalid video keywords.'
+    """
     clean = []
     for tag in tags:
-        if isinstance(tag, str):
-            ascii_tag = tag.encode("ascii", errors="ignore").decode()
-            ascii_tag = ascii_tag.strip()[:100]
-            if ascii_tag and len(ascii_tag) >= 2:
-                clean.append(ascii_tag)
-    return clean[:30]
+        if not isinstance(tag, str): continue
+        # Remove ALL non-ASCII characters
+        ascii_tag = tag.encode("ascii", errors="ignore").decode()
+        # Remove special chars except hyphen, space, apostrophe
+        import re
+        ascii_tag = re.sub(r"[^a-zA-Z0-9\s\-\'&]", "", ascii_tag)
+        ascii_tag = " ".join(ascii_tag.split()).strip()  # normalise spaces
+        ascii_tag = ascii_tag[:100]
+        if ascii_tag and len(ascii_tag) >= 2:
+            clean.append(ascii_tag)
+    # Deduplicate
+    seen = set(); deduped = []
+    for t in clean:
+        if t.lower() not in seen:
+            seen.add(t.lower()); deduped.append(t)
+    return deduped[:30]
+
+
+SAFE_DEFAULT_TAGS = [
+    "thulir", "tamil storytelling", "tamil motivation 2026",
+    "true story tamil", "real stories tamil", "almost everything tamil",
+    "tamil youtube 2026", "interesting facts tamil", "tamil documentary",
+    "motivational stories tamil", "biography tamil", "success stories tamil",
+    "thuLir stories", "tamil history stories", "inspired by real events tamil",
+]
 
 def _default_tags(protagonist: str, bucket: str) -> list:
+    # Always start with guaranteed safe ASCII tags
     base = [
         "thulir", "tamil storytelling", "tamil motivation 2026",
         "true story tamil", "real stories tamil", "almost everything tamil",
