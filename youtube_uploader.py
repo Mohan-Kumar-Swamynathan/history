@@ -101,6 +101,13 @@ def upload_video(video_path: Path, thumbnail_path: Path, metadata: Dict, topic: 
     tags = metadata.get("tags", ["Tamil history", "varalaru"])[:30]
 
     youtube = _build_youtube_service()
+    # Final safety strip — YouTube API rejects ANY non-ASCII in tags
+    import re as _re
+    def _strip(t): return _re.sub(r"[^a-zA-Z0-9\s\-\'&]","",t.encode("ascii","ignore").decode()).strip()
+    tags = [s for t in tags if (s := _strip(t)) and len(s) >= 2][:30]
+    if not tags:
+        tags = ["thulir", "tamil storytelling", "tamil youtube", "biography tamil"]
+
     body = {
         "snippet": {
             "title": title,
