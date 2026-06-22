@@ -256,3 +256,71 @@ def _extract_hook_text(title_ta: str) -> str:
         return raw[:22]
     words = title_ta.split()
     return " ".join(words[:3]) if words else title_ta[:15]
+
+
+# ── View Optimization Utilities ─────────────────────────────────────
+
+def append_shorts_link(youtube_service, video_id: str, shorts_url: str) -> None:
+    """Update long video description to include Shorts cross-link."""
+    try:
+        resp = youtube_service.videos().list(
+            part="snippet", id=video_id).execute()
+        if not resp.get("items"): return
+        snippet = resp["items"][0]["snippet"]
+        desc = snippet.get("description", "")
+        shorts_line = f"\n\n📱 இந்த வீடியோவின் Short version: {shorts_url}\n#Shorts"
+        if shorts_url not in desc:
+            snippet["description"] = desc + shorts_line
+            youtube_service.videos().update(
+                part="snippet",
+                body={"id": video_id, "snippet": snippet}
+            ).execute()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("append_shorts_link failed: %s", e)
+
+
+def build_seo_title_variants(title_ta: str, protagonist: str) -> list:
+    """Generate 5 title variants optimised for different discovery paths.
+    
+    YouTube tests multiple titles — having good variants increases CTR.
+    Strategy:
+      1. Curiosity gap (primary)
+      2. Number hook
+      3. Protagonist name first
+      4. Question format
+      5. Emotional hook
+    """
+    name = protagonist
+    return [
+        title_ta,  # primary — curiosity gap
+        f"{name} கதை — நம்பமுடியாத உண்மை | துளிர்",
+        f"இந்த கதை கேட்டீர்களா? {name} | Tamil Stories",
+        f"ஏன் {name} இன்னும் நினைவில் இருக்கிறார்? | துளிர்",
+        f"{name} — Real Story Tamil | துளிர் கதைகள்",
+    ]
+
+
+def optimise_description_for_seo(desc: str, protagonist: str,
+                                  hook_q: str, chapters: str) -> str:
+    """SEO-optimised description structure for maximum YouTube discovery.
+    
+    YouTube shows first 100 chars in search. Algorithm reads:
+    - First 2 lines for relevance
+    - Timestamps for 'Key moments' feature
+    - Last lines for channel authority
+    """
+    name_en = protagonist.encode("ascii","ignore").decode().strip()
+    return (
+        f"{hook_q}\n\n"                          # Line 1-2: shown in search
+        f"🌱 துளிர் — உண்மையான கதைகள்.\n\n"
+        f"இந்த வீடியோவில்:\n"
+        f"✅ {protagonist}-ன் உண்மையான கதை\n\n"
+        f"⏱️ நேரடி அட்டவணை:\n{chapters}\n\n"
+        f"👍 லைக் | 🔔 சந்தா | 💬 கருத்து\n\n"
+        f"📺 எங்கள் மற்ற சேனல்கள்:\n"
+        f"🕉️ @AlayaManiTamil  💰 @NidhiNeethiTamil  🚗 @tech_meets_travel\n\n"
+        f"#துளிர் #{name_en.replace(' ','')} #TamilStorytelling "
+        f"#TamilYouTube #MotivationalTamil #biography #realstory"
+    )
+
