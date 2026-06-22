@@ -473,10 +473,23 @@ class VideoPipelineV3:
                     f"{topic.title_ta}-shorts-{run_id}".encode()
                 ).hexdigest()[:12]
                 assert package.metadata is not None
+                # Add full video link to Shorts description for view funneling
+                shorts_meta = package.metadata
+                long_url = package.youtube_url if hasattr(package, "youtube_url") else ""
+                if long_url:
+                    from copy import deepcopy
+                    try:
+                        shorts_meta = deepcopy(package.metadata)
+                        old_desc = shorts_meta.description_ta or ""
+                        shorts_meta.description_ta = (
+                            f"🎬 முழு வீடியோ இங்கே: {long_url}\n\n{old_desc}"
+                        )
+                    except Exception:
+                        pass
                 self.uploader.upload_shorts(
-                    shorts_path, package.metadata, topic, shorts_slug
+                    shorts_path, shorts_meta, topic, shorts_slug
                 )
-                log.info("Shorts uploaded")
+                log.info("✅ Shorts uploaded — linked to full video")
         except Exception as exc:
             if skip_upload:
                 log.warning("Shorts generation failed: %s", exc)
