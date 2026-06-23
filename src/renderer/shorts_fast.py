@@ -2,7 +2,7 @@
 
 Strategy:
   - Takes hook beat (first 45s) from long video
-  - Re-renders at 1080x1920 (portrait/vertical) 
+  - Re-renders at 1080x1920 (portrait/vertical)
   - Adds Shorts-specific overlay (big hook text + subscribe CTA)
   - No new LLM calls — reuses script, audio, images from long video
   - Target: 30-50 seconds
@@ -10,7 +10,6 @@ Strategy:
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import subprocess
 from pathlib import Path
@@ -75,16 +74,16 @@ def render_shorts_frame(
     protagonist: str,
     show_cta: bool = False,
 ) -> np.ndarray:
-    """Render one Shorts frame — portrait 1080×1920."""
+    """Render one Shorts frame — portrait 1080x1920."""
     frame = Image.new("RGB", (SW, SH), BG)
     draw  = ImageDraw.Draw(frame)
 
-    # ── Background: scene image fills top 60% ──────────────────────
+    # Background: scene image fills top 60%
     img_h = int(SH * 0.62)
     panel = scene_image.resize((SW, img_h), Image.LANCZOS)
     frame.paste(panel, (0, 0))
 
-    # ── Brand gradient strip over image (bottom of image) ──────────
+    # Brand gradient strip over image (bottom of image)
     for y in range(img_h - 120, img_h):
         t = (y-(img_h-120))/120
         r=int(BG[0]*(1-t)+PRIMARY[0]*t*0.7+BG[0]*t*0.3)
@@ -92,7 +91,7 @@ def render_shorts_frame(
         b=int(BG[2]*(1-t)+PRIMARY[2]*t*0.7+BG[2]*t*0.3)
         draw.line([(0,y),(SW,y)],fill=(r,g,b))
 
-    # ── Text area — bottom 40% on cream background ──────────────────
+    # Text area — bottom 40% on cream background
     text_y_start = img_h
     draw.rectangle([0, text_y_start, SW, SH], fill=BG)
 
@@ -113,7 +112,6 @@ def render_shorts_frame(
         bbox = draw.textbbox((0,0),line,font=f)
         lw   = bbox[2]-bbox[0]
         x    = max(30,(SW-lw)//2)
-        # Shadow
         draw.text((x+2,y+2),line,font=f,fill=(0,0,0))
         draw.text((x,y),line,font=f,fill=INK)
         y += (bbox[3]-bbox[1]) + 16
@@ -129,7 +127,6 @@ def render_shorts_frame(
         cta_x = (SW-(cta_b[2]-cta_b[0]))//2
         draw.text((cta_x, cta_y+28), cta, font=cta_f, fill=CREAM)
     else:
-        # Protagonist name badge bottom
         name_f = _font("en" if protagonist.isascii() else "ta", 36)
         name_b = draw.textbbox((0,0),protagonist,font=name_f)
         name_x = (SW-(name_b[2]-name_b[0]))//2
@@ -152,12 +149,9 @@ def generate_shorts(
     fps = 12
     total_frames = int(duration_s * fps)
 
-    # Determine text lines from hook narration
     words = hook_narration.split()
-    # Show first 2 lines as hook text
     hook_text = " ".join(words[:12]) if len(words) > 12 else hook_narration
 
-    # Encode
     cmd = [
         "ffmpeg", "-y", "-loglevel", "error",
         "-f", "rawvideo", "-vcodec", "rawvideo",
@@ -170,25 +164,56 @@ def generate_shorts(
         "-shortest",
         str(output_path),
     ]
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    proc = subprocess.Popen(
+        cmd,
+        stdin=subprocess.PIPE,
+        stderr=subprocess.PIPE,   # capture stderr so we can report ffmpeg errors
+    )
 
     prev_h, prev_b = None, None
+    encode_error: Exception | None = None
+
     for fi in range(total_frames):
+        if proc.poll() is not None:
+            # ffmpeg died early — read stderr and abort cleanly
+            stderr_out = proc.stderr.read().decode(errors="replace")
+            raise RuntimeError(
+                f"ffmpeg exited early (rc={proc.returncode}) during Shorts render: {stderr_out[-500:]}"
+            )
         progress  = fi / max(total_frames-1, 1)
         show_cta  = progress > 0.80
         frame     = render_shorts_frame(hook_text, hook_image, progress,
                                         protagonist, show_cta)
         h = frame[::16,::16].tobytes()
-        if h == prev_h and prev_b:
-            proc.stdin.write(prev_b)
-        else:
-            raw = frame.tobytes()
-            proc.stdin.write(raw)
-            prev_h, prev_b = h, raw
+        raw = (prev_b if h == prev_h and prev_b else frame.tobytes())
+        prev_h, prev_b = h, raw
 
-    proc.stdin.close()
+        try:
+            proc.stdin.write(raw)
+        except BrokenPipeError:
+            # ffmpeg pipe closed — read stderr for the real reason
+            stderr_out = proc.stderr.read().decode(errors="replace")
+            encode_error = RuntimeError(
+                f"ffmpeg stdin pipe broke at frame {fi}/{total_frames}: {stderr_out[-500:]}"
+            )
+            break
+
+    # Always close stdin gracefully
+    try:
+        proc.stdin.close()
+    except Exception:
+        pass
+
     proc.wait()
+
+    if encode_error:
+        raise encode_error
+
     if proc.returncode != 0:
-        raise RuntimeError("Shorts encoding failed")
-    log.info("✅ Shorts encoded: %s", output_path)
+        stderr_out = proc.stderr.read().decode(errors="replace")
+        raise RuntimeError(
+            f"Shorts encoding failed (rc={proc.returncode}): {stderr_out[-500:]}"
+        )
+
+    log.info("Shorts encoded: %s", output_path)
     return output_path
