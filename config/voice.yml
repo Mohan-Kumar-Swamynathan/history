@@ -1,14 +1,14 @@
 provider: edge_tts
 
-# PallaviNeural (female) — much clearer Tamil, better English handling
-# ValluvarNeural (male) — deeper but struggles with English proper nouns
+# PallaviNeural — best Tamil clarity + natural prosody
+# ValluvarNeural is available but PallaviNeural handles mixed text better
 default_voice: ta-IN-PallaviNeural
 female_voice: ta-IN-PallaviNeural
 
-# Rate: -15% = noticeably slower = much clearer for viewers
-# This is the key setting for clarity
-rate: "-15%"
-pitch: "+0Hz"
+# Rate: -8% = natural storytelling pace (was -15% which sounded robotic/dragged)
+# Pitch: +2Hz lifts the flat synthesised quality — sounds more alive
+rate: "-8%"
+pitch: "+2Hz"
 
-# Longer pause between beats = breathing room = natural storytelling
+# 600ms pause between beats — good breathing room
 pause_between_beats_ms: 600
