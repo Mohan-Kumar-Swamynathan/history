@@ -1,12 +1,12 @@
-"""Clean video pipeline v3 — Pexels images + AE-style render.
+"""Clean video pipeline v3 — Pexels stock video or sketch render.
 
 Pipeline:
   1. Topic discovery
   2. Research (Wikipedia)
-  3. Script — 6 beats, AE rhythm
+  3. Script — beat-based AE rhythm
   4. Voice synthesis (edge-tts)
-  5. Images — prefetch all 6 from Pexels, convert to sketch
-  6. Render — PIL only, fast, ~8-12 min on CI
+  5. Images — prefetch Pexels photos (sketch fallback)
+  6. Render — stock video clips (USE_STOCK_VIDEO) or PIL sketch frames
   7. Mux audio
   8. Burn subtitles (ffmpeg filter)
   9. Thumbnail
@@ -48,7 +48,18 @@ from src.script.narrative_generator_v3 import NarrativeGeneratorV3
 from src.renderer.intro_renderer import render_intro_frames, render_lower_third
 from src.image_engine.image_engine import ImageEngine
 from src.renderer.ae_engine_v3 import render_scene_frames, render_transition
-from src.renderer.shorts_fast import generate_shorts
+from src.renderer.shorts_fast import generate_shorts, generate_shorts_from_stock
+from src.renderer.stock_video_engine import (
+    build_beat_scenes,
+    build_short_scene,
+    build_stock_silent_video,
+    concat_video_segments,
+    encode_intro_video,
+    fetch_beat_stock_videos,
+    is_stock_video_enabled,
+    mux_audio_into_video,
+    save_beat_images_for_fallback,
+)
 
 log = logging.getLogger(__name__)
 
@@ -208,30 +219,6 @@ class VideoPipelineV3:
         beat_images = self.image_engine.prefetch_all(beats, topic.title_ta)
         log.info("Images ready: %d", len(beat_images))
 
-        log.info("Rendering frames (%dfps → 24fps output, PIL only)...", RENDER_FPS)
-        all_frame_batches: List[List[np.ndarray]] = []
-        hook_frame = None
-
-        for index, beat in enumerate(beats):
-            segment = narration_bundle.segments[index]
-            image_panel = beat_images.get(index, beat_images.get(0))
-
-            frames = render_scene_frames(
-                beat_narration=beat.narration_ta,
-                image_panel=image_panel,
-                duration_s=beat.duration_seconds,
-                word_timings=segment.word_timings,
-                fps=RENDER_FPS,
-                scene_idx=index,
-            )
-
-            if hook_frame is None and frames:
-                hook_frame = frames[int(len(frames) * 0.7)]
-
-            all_frame_batches.append(frames)
-            log.info("Scene %d/%d — %d frames", index + 1, len(beats), len(frames))
-
-        log.info("Assembling video...")
         log.info("Rendering intro card...")
         intro_frames_raw = render_intro_frames(
             channel_name_ta="துளிர்",
@@ -242,96 +229,177 @@ class VideoPipelineV3:
         intro_frames = resample_intro_frames(intro_frames_raw, RENDER_FPS)
         log.info("Intro: %d frames (resampled from %d)", len(intro_frames), len(intro_frames_raw))
 
-        transition_frames = 4
         raw_video_path = run_dir / "raw_video.mp4"
+        stock_video_rendered = False
+        hook_frame = None
 
-        enc_cmd = [
-            "ffmpeg", "-y", "-loglevel", "error",
-            "-f", "rawvideo", "-vcodec", "rawvideo",
-            "-s", "1920x1080", "-pix_fmt", "rgb24",
-            "-r", str(RENDER_FPS),
-            "-i", "pipe:0",
-            "-vf", "fps=24",
-            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-            "-pix_fmt", "yuv420p",
-            str(raw_video_path),
-        ]
-        enc_proc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
-
-        prev_hash = None
-        prev_bytes = None
-
-        def write_frame(frame: np.ndarray) -> None:
-            nonlocal prev_hash, prev_bytes
-            frame_hash = hashlib.md5(frame[::16, ::16].tobytes()).digest()
-            if frame_hash == prev_hash and prev_bytes:
-                enc_proc.stdin.write(prev_bytes)
-            else:
-                raw = frame.tobytes()
-                enc_proc.stdin.write(raw)
-                prev_hash, prev_bytes = frame_hash, raw
-
-        for frame in intro_frames:
-            write_frame(frame)
-
-        offset_ms = intro_offset_ms()
-        for index, timing in enumerate(narration_bundle.all_word_timings):
-            narration_bundle.all_word_timings[index] = timing.model_copy(
-                update={
-                    "start_ms": timing.start_ms + offset_ms,
-                    "end_ms": timing.end_ms + offset_ms,
-                }
+        if is_stock_video_enabled():
+            log.info("Stock video mode (landscape 1920x1080)...")
+            beat_scenes = build_beat_scenes(beats)
+            stock_cache_dir = run_dir / "stock" / "landscape"
+            landscape_videos = fetch_beat_stock_videos(
+                beats,
+                topic.title_ta,
+                stock_cache_dir,
+                orientation="landscape",
             )
-
-        lower_third_frame_limit = int(3 * RENDER_FPS)
-
-        for batch_index, batch in enumerate(all_frame_batches):
-            beat = beats[batch_index]
-            situation_text = topic.situation[:30] if topic.situation else ""
-            lt_subtitle = beat.on_screen_text or situation_text
-            show_lower_third = batch_index == 0
-
-            def write_batch_frames(frames, start_frame_index=0):
-                for frame_index, frame in enumerate(frames):
-                    if show_lower_third and (start_frame_index + frame_index) < lower_third_frame_limit:
-                        try:
-                            pil_frame = Image.fromarray(frame)
-                            pil_frame = render_lower_third(
-                                pil_frame,
-                                protagonist=beat.protagonist,
-                                subtitle=lt_subtitle,
-                                beat_frame=start_frame_index + frame_index,
-                                total_beat_frames=len(batch),
-                                fps=RENDER_FPS,
-                            )
-                            frame = np.array(pil_frame)
-                        except Exception as exc:
-                            log.warning("Lower-third render failed: %s", exc)
-                    write_frame(frame)
-
-            if batch_index > 0:
-                previous_batch = all_frame_batches[batch_index - 1]
-                tail = (
-                    previous_batch[-transition_frames:]
-                    if len(previous_batch) >= transition_frames
-                    else previous_batch
-                )
-                head = batch[:transition_frames]
-                for transition_index in range(min(len(tail), len(head), transition_frames)):
-                    transition_progress = (transition_index + 1) / transition_frames
-                    blended = render_transition(
-                        tail[transition_index], head[transition_index],
-                        transition_progress, style="flipbook",
+            fallback_image_paths = save_beat_images_for_fallback(beat_images, run_dir)
+            content_video_path = run_dir / "stock_content.mp4"
+            stock_body_rendered = build_stock_silent_video(
+                beat_scenes,
+                landscape_videos,
+                fallback_image_paths,
+                1920,
+                1080,
+                content_video_path,
+                output_name=run_id,
+            )
+            if stock_body_rendered:
+                intro_video_path = run_dir / "intro.mp4"
+                if encode_intro_video(intro_frames, intro_video_path, RENDER_FPS):
+                    stock_video_rendered = concat_video_segments(
+                        [intro_video_path, content_video_path],
+                        raw_video_path,
                     )
-                    write_frame(blended)
-                write_batch_frames(batch[transition_frames:], start_frame_index=transition_frames)
+                else:
+                    shutil.copy(content_video_path, raw_video_path)
+                    stock_video_rendered = True
+            if stock_video_rendered:
+                log.info("Stock video rendered (%d beat scenes)", len(beat_scenes))
             else:
-                write_batch_frames(batch)
+                log.warning("Stock video failed — falling back to PIL render")
 
-        enc_proc.stdin.close()
-        encode_return_code = enc_proc.wait()
-        if encode_return_code != 0:
-            raise RuntimeError(f"Raw video encoding failed (exit code {encode_return_code})")
+        if not stock_video_rendered:
+            log.info("Rendering frames (%dfps → 24fps output, PIL only)...", RENDER_FPS)
+            all_frame_batches: List[List[np.ndarray]] = []
+            hook_frame = None
+
+            for index, beat in enumerate(beats):
+                segment = narration_bundle.segments[index]
+                image_panel = beat_images.get(index, beat_images.get(0))
+
+                frames = render_scene_frames(
+                    beat_narration=beat.narration_ta,
+                    image_panel=image_panel,
+                    duration_s=beat.duration_seconds,
+                    word_timings=segment.word_timings,
+                    fps=RENDER_FPS,
+                    scene_idx=index,
+                )
+
+                if hook_frame is None and frames:
+                    hook_frame = frames[int(len(frames) * 0.7)]
+
+                all_frame_batches.append(frames)
+                log.info("Scene %d/%d — %d frames", index + 1, len(beats), len(frames))
+
+            log.info("Assembling video...")
+            transition_frames = 4
+
+            enc_cmd = [
+                "ffmpeg", "-y", "-loglevel", "error",
+                "-f", "rawvideo", "-vcodec", "rawvideo",
+                "-s", "1920x1080", "-pix_fmt", "rgb24",
+                "-r", str(RENDER_FPS),
+                "-i", "pipe:0",
+                "-vf", "fps=24",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                str(raw_video_path),
+            ]
+            enc_proc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
+
+            prev_hash = None
+            prev_bytes = None
+
+            def write_frame(frame: np.ndarray) -> None:
+                nonlocal prev_hash, prev_bytes
+                frame_hash = hashlib.md5(frame[::16, ::16].tobytes()).digest()
+                if frame_hash == prev_hash and prev_bytes:
+                    enc_proc.stdin.write(prev_bytes)
+                else:
+                    raw = frame.tobytes()
+                    enc_proc.stdin.write(raw)
+                    prev_hash, prev_bytes = frame_hash, raw
+
+            for frame in intro_frames:
+                write_frame(frame)
+
+            offset_ms = intro_offset_ms()
+            for index, timing in enumerate(narration_bundle.all_word_timings):
+                narration_bundle.all_word_timings[index] = timing.model_copy(
+                    update={
+                        "start_ms": timing.start_ms + offset_ms,
+                        "end_ms": timing.end_ms + offset_ms,
+                    }
+                )
+
+            lower_third_frame_limit = int(3 * RENDER_FPS)
+
+            for batch_index, batch in enumerate(all_frame_batches):
+                beat = beats[batch_index]
+                situation_text = topic.situation[:30] if topic.situation else ""
+                lt_subtitle = beat.on_screen_text or situation_text
+                show_lower_third = batch_index == 0
+
+                def write_batch_frames(frames, start_frame_index=0):
+                    for frame_index, frame in enumerate(frames):
+                        if show_lower_third and (start_frame_index + frame_index) < lower_third_frame_limit:
+                            try:
+                                pil_frame = Image.fromarray(frame)
+                                pil_frame = render_lower_third(
+                                    pil_frame,
+                                    protagonist=beat.protagonist,
+                                    subtitle=lt_subtitle,
+                                    beat_frame=start_frame_index + frame_index,
+                                    total_beat_frames=len(batch),
+                                    fps=RENDER_FPS,
+                                )
+                                frame = np.array(pil_frame)
+                            except Exception as exc:
+                                log.warning("Lower-third render failed: %s", exc)
+                        write_frame(frame)
+
+                if batch_index > 0:
+                    previous_batch = all_frame_batches[batch_index - 1]
+                    tail = (
+                        previous_batch[-transition_frames:]
+                        if len(previous_batch) >= transition_frames
+                        else previous_batch
+                    )
+                    head = batch[:transition_frames]
+                    for transition_index in range(min(len(tail), len(head), transition_frames)):
+                        transition_progress = (transition_index + 1) / transition_frames
+                        blended = render_transition(
+                            tail[transition_index], head[transition_index],
+                            transition_progress, style="flipbook",
+                        )
+                        write_frame(blended)
+                    write_batch_frames(batch[transition_frames:], start_frame_index=transition_frames)
+                else:
+                    write_batch_frames(batch)
+
+            enc_proc.stdin.close()
+            encode_return_code = enc_proc.wait()
+            if encode_return_code != 0:
+                raise RuntimeError(f"Raw video encoding failed (exit code {encode_return_code})")
+        else:
+            offset_ms = intro_offset_ms()
+            for index, timing in enumerate(narration_bundle.all_word_timings):
+                narration_bundle.all_word_timings[index] = timing.model_copy(
+                    update={
+                        "start_ms": timing.start_ms + offset_ms,
+                        "end_ms": timing.end_ms + offset_ms,
+                    }
+                )
+            hook_frame = None
+            try:
+                hook_image = beat_images.get(0)
+                if hook_image is not None:
+                    hook_frame = np.array(hook_image.resize((1280, 720)))
+            except Exception:
+                hook_frame = None
+
         log.info("Raw video encoded")
 
         total_video_seconds = INTRO_DURATION_S + narration_bundle.total_duration_seconds
@@ -461,14 +529,54 @@ class VideoPipelineV3:
             hook_segment = narration_bundle.segments[0]
             hook_image = beat_images.get(0)
             shorts_path = run_dir / "shorts.mp4"
-            generate_shorts(
-                hook_narration=hook_beat.narration_ta,
-                hook_audio_path=Path(hook_segment.audio_path),
-                hook_image=hook_image,
-                protagonist=topic.protagonist,
-                output_path=shorts_path,
-                duration_s=min(hook_segment.duration_seconds + 2, 55.0),
-            )
+            short_duration_s = min(hook_segment.duration_seconds + 2, 55.0)
+            short_rendered = False
+
+            if is_stock_video_enabled():
+                short_scenes = build_short_scene(short_duration_s)
+                portrait_cache_dir = run_dir / "stock" / "portrait"
+                portrait_videos = fetch_beat_stock_videos(
+                    [hook_beat],
+                    topic.title_ta,
+                    portrait_cache_dir,
+                    orientation="portrait",
+                )
+                fallback_image_paths = save_beat_images_for_fallback({0: hook_image}, run_dir)
+                short_raw_path = run_dir / "shorts_raw.mp4"
+                if build_stock_silent_video(
+                    short_scenes,
+                    portrait_videos,
+                    fallback_image_paths,
+                    1080,
+                    1920,
+                    short_raw_path,
+                    output_name=f"{run_id}_short",
+                ):
+                    short_muxed_path = run_dir / "shorts_muxed.mp4"
+                    if mux_audio_into_video(
+                        short_raw_path,
+                        Path(hook_segment.audio_path),
+                        short_muxed_path,
+                        max_duration_seconds=short_duration_s,
+                    ):
+                        generate_shorts_from_stock(
+                            hook_narration=hook_beat.narration_ta,
+                            stock_video_path=short_muxed_path,
+                            protagonist=topic.protagonist,
+                            output_path=shorts_path,
+                        )
+                        short_rendered = True
+                        log.info("Native portrait Shorts rendered from stock video")
+
+            if not short_rendered:
+                generate_shorts(
+                    hook_narration=hook_beat.narration_ta,
+                    hook_audio_path=Path(hook_segment.audio_path),
+                    hook_image=hook_image,
+                    protagonist=topic.protagonist,
+                    output_path=shorts_path,
+                    duration_s=short_duration_s,
+                )
             package = package.model_copy(update={"shorts_video_path": str(shorts_path)})
 
             if not skip_upload:

@@ -49,6 +49,7 @@ env:
   GITHUB_TOKEN:          ${{ secrets.GITHUB_TOKEN }}
   GITHUB_MODELS_TOKEN:   ${{ secrets.GH_PAT_TOKEN || secrets.GITHUB_TOKEN }}
   PEXELS_API_KEY:        ${{ secrets.PEXELS_API_KEY }}
+  USE_STOCK_VIDEO:       "true"
   PYTHONUNBUFFERED:      "1"
   LLM_MODE:              hybrid
   LLM_CI_STRATEGY:       github_first

@@ -217,3 +217,45 @@ def generate_shorts(
 
     log.info("Shorts encoded: %s", output_path)
     return output_path
+
+
+def generate_shorts_from_stock(
+    hook_narration: str,
+    stock_video_path: Path,
+    protagonist: str,
+    output_path: Path,
+) -> Path:
+    """Apply Shorts text overlays on a portrait stock video (audio already muxed)."""
+    words = hook_narration.split()
+    hook_text = " ".join(words[:12]) if len(words) > 12 else hook_narration
+    safe_hook = hook_text.replace("'", "").replace(":", " -")[:80]
+    safe_name = protagonist.replace("'", "").replace(":", " -")[:30]
+
+    overlay_filter = (
+        "drawbox=x=0:y=0:w=iw:h=8:color=0xD4AF37:t=fill,"
+        f"drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSansTamil-Bold.ttf:"
+        f"text='{safe_hook}':fontsize=42:fontcolor=white:"
+        f"x=(w-tw)/2:y=h*0.68:shadowcolor=black:shadowx=2:shadowy=2,"
+        f"drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf:"
+        f"text='{safe_name}':fontsize=28:fontcolor=yellow:"
+        f"x=40:y=h*0.82:shadowcolor=black:shadowx=1:shadowy=1,"
+        "drawtext=fontfile=/usr/share/fonts/truetype/noto/NotoSans-Bold.ttf:"
+        "text='Subscribe @thulir':fontsize=24:fontcolor=white:"
+        "x=(w-tw)/2:y=h-80:enable='gte(t,8)':shadowcolor=black:shadowx=1:shadowy=1"
+    )
+
+    result = subprocess.run([
+        "ffmpeg", "-y", "-loglevel", "error",
+        "-i", str(stock_video_path),
+        "-vf", overlay_filter,
+        "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+        "-c:a", "copy",
+        "-movflags", "+faststart",
+        str(output_path),
+    ], capture_output=True, text=True, timeout=300)
+
+    if result.returncode != 0:
+        raise RuntimeError(f"Shorts stock overlay failed: {result.stderr[-300:]}")
+
+    log.info("Shorts stock overlay encoded: %s", output_path)
+    return output_path
