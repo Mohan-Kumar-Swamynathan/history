@@ -1,6 +1,6 @@
 name: Cleanup Old Artifacts
 
-# DISABLED — use thulir_unified.yml for all scheduled jobs.
+# DISABLED — manual artifact cleanup only. Video generation uses thulir_unified.yml.
 
 on:
   workflow_dispatch:
