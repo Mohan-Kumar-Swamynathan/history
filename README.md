@@ -45,7 +45,7 @@ python generate_video.py --format short --upload
 
 Supporting workflows:
 - `keepalive.yml` — daily repo ping
-- `cleanup_artifacts.yml` — manual artifact cleanup
+- `cleanup_artifacts.yml` — deletes CI artifacts older than 2 days (runs daily)
 
 ---
 
