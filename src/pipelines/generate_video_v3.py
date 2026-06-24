@@ -1,16 +1,15 @@
-"""Clean video pipeline v3 — Pexels stock video or sketch render.
+"""Clean video pipeline v3 — Pexels stock video (am/nn style).
 
 Pipeline:
   1. Topic discovery
   2. Research (Wikipedia)
-  3. Script — beat-based AE rhythm
+  3. Script — beat-based rhythm
   4. Voice synthesis (edge-tts)
-  5. Images — prefetch Pexels photos (sketch fallback)
-  6. Render — stock video clips (USE_STOCK_VIDEO) or PIL sketch frames
-  7. Mux audio
-  8. Burn subtitles (ffmpeg filter)
-  9. Thumbnail
- 10. Upload
+  5. Pexels stock clips per beat (+ photo fallback for Ken Burns)
+  6. Intro concat + mux audio
+  7. Burn subtitles
+  8. Thumbnail
+  9. Upload
 """
 
 from __future__ import annotations
@@ -19,7 +18,6 @@ import hashlib
 import json
 import logging
 import shutil
-import subprocess
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -45,10 +43,9 @@ from src.voice_engine.voice_engine import VoiceEngine
 
 # v3 components
 from src.script.narrative_generator_v3 import NarrativeGeneratorV3
-from src.renderer.intro_renderer import render_intro_frames, render_lower_third
+from src.renderer.intro_renderer import render_intro_frames
 from src.image_engine.image_engine import ImageEngine
-from src.renderer.ae_engine_v3 import render_scene_frames, render_transition
-from src.renderer.shorts_fast import generate_shorts, generate_shorts_from_stock
+from src.renderer.shorts_fast import generate_shorts_from_stock
 from src.renderer.stock_video_engine import (
     build_beat_scenes,
     build_short_scene,
@@ -56,14 +53,135 @@ from src.renderer.stock_video_engine import (
     concat_video_segments,
     encode_intro_video,
     fetch_beat_stock_videos,
-    is_stock_video_enabled,
     mux_audio_into_video,
-    save_beat_images_for_fallback,
+    require_stock_video_enabled,
 )
 
 log = logging.getLogger(__name__)
 
-RENDER_FPS = 8  # render at 8fps — 33% fewer PIL frames
+RENDER_FPS = 8  # intro card encode rate
+
+
+def _shift_subtitles_for_intro(narration_bundle) -> None:
+    offset_ms = intro_offset_ms()
+    for index, timing in enumerate(narration_bundle.all_word_timings):
+        narration_bundle.all_word_timings[index] = timing.model_copy(
+            update={
+                "start_ms": timing.start_ms + offset_ms,
+                "end_ms": timing.end_ms + offset_ms,
+            }
+        )
+
+
+def _load_hook_frame(fallback_photo_path: Optional[Path]) -> Optional[np.ndarray]:
+    if fallback_photo_path is None or not fallback_photo_path.exists():
+        return None
+    try:
+        return np.array(Image.open(fallback_photo_path).convert("RGB").resize((1280, 720)))
+    except Exception as exc:
+        log.warning("Hook frame load failed: %s", exc)
+        return None
+
+
+def _ordered_fallback_paths(fallback_photos: dict[int, Path]) -> List[Path]:
+    return [fallback_photos[index] for index in sorted(fallback_photos.keys())]
+
+
+def render_stock_long_video(
+    run_id: str,
+    run_dir: Path,
+    beats: list,
+    topic_title: str,
+    intro_frames: List[np.ndarray],
+    fallback_photos: dict[int, Path],
+) -> Path:
+    require_stock_video_enabled()
+    raw_video_path = run_dir / "raw_video.mp4"
+    beat_scenes = build_beat_scenes(beats)
+    stock_cache_dir = run_dir / "stock" / "landscape"
+    landscape_videos = fetch_beat_stock_videos(
+        beats,
+        topic_title,
+        stock_cache_dir,
+        orientation="landscape",
+    )
+    fallback_paths = _ordered_fallback_paths(fallback_photos)
+    content_video_path = run_dir / "stock_content.mp4"
+
+    if not build_stock_silent_video(
+        beat_scenes,
+        landscape_videos,
+        fallback_paths,
+        1920,
+        1080,
+        content_video_path,
+        output_name=run_id,
+    ):
+        raise RuntimeError("Stock video rendering failed")
+
+    intro_video_path = run_dir / "intro.mp4"
+    if encode_intro_video(intro_frames, intro_video_path, RENDER_FPS):
+        if not concat_video_segments([intro_video_path, content_video_path], raw_video_path):
+            raise RuntimeError("Intro + stock video concat failed")
+    else:
+        shutil.copy(content_video_path, raw_video_path)
+
+    log.info("Stock video rendered (%d beat scenes)", len(beat_scenes))
+    return raw_video_path
+
+
+def render_portrait_short_video(
+    run_id: str,
+    run_dir: Path,
+    hook_beat,
+    topic_title: str,
+    hook_narration: str,
+    protagonist: str,
+    hook_audio_path: Path,
+    fallback_photos: dict[int, Path],
+    duration_seconds: float,
+) -> Path:
+    require_stock_video_enabled()
+    shorts_path = run_dir / "shorts.mp4"
+    short_scenes = build_short_scene(duration_seconds)
+    portrait_cache_dir = run_dir / "stock" / "portrait"
+    portrait_videos = fetch_beat_stock_videos(
+        [hook_beat],
+        topic_title,
+        portrait_cache_dir,
+        orientation="portrait",
+    )
+    fallback_paths = _ordered_fallback_paths(fallback_photos)
+    short_raw_path = run_dir / "shorts_raw.mp4"
+
+    if not build_stock_silent_video(
+        short_scenes,
+        portrait_videos,
+        fallback_paths,
+        1080,
+        1920,
+        short_raw_path,
+        output_name=f"{run_id}_short",
+    ):
+        raise RuntimeError("Portrait stock Shorts rendering failed")
+
+    short_muxed_path = run_dir / "shorts_muxed.mp4"
+    if not mux_audio_into_video(
+        short_raw_path,
+        hook_audio_path,
+        short_muxed_path,
+        max_duration_seconds=duration_seconds,
+    ):
+        raise RuntimeError("Shorts audio mux failed")
+
+    generate_shorts_from_stock(
+        hook_narration=hook_narration,
+        stock_video_path=short_muxed_path,
+        protagonist=protagonist,
+        output_path=shorts_path,
+    )
+    log.info("Portrait stock Shorts rendered")
+    return shorts_path
 
 
 def resample_intro_frames(intro_frames: List[np.ndarray], render_fps: int) -> List[np.ndarray]:
@@ -154,17 +272,21 @@ class VideoPipelineV3:
         narration_bundle = self.voice_engine.synthesize_all_beats([hook_beat], audio_dir)
         hook_segment = narration_bundle.segments[0]
 
-        beat_images = self.image_engine.prefetch_all([hook_beat], topic.title_ta)
-        hook_image = beat_images.get(0)
-
-        shorts_path = run_dir / "shorts.mp4"
-        generate_shorts(
+        beat_images_dir = run_dir / "fallback_images"
+        fallback_photos = self.image_engine.prefetch_fallback_photos(
+            [hook_beat], topic.title_ta, beat_images_dir
+        )
+        short_duration_s = min(hook_segment.duration_seconds + 2, 55.0)
+        shorts_path = render_portrait_short_video(
+            run_id=run_id,
+            run_dir=run_dir,
+            hook_beat=hook_beat,
+            topic_title=topic.title_ta,
             hook_narration=hook_beat.narration_ta,
-            hook_audio_path=Path(hook_segment.audio_path),
-            hook_image=hook_image,
             protagonist=topic.protagonist,
-            output_path=shorts_path,
-            duration_s=min(hook_segment.duration_seconds + 2, 55.0),
+            hook_audio_path=Path(hook_segment.audio_path),
+            fallback_photos=fallback_photos,
+            duration_seconds=short_duration_s,
         )
 
         chapters = [{"time": "00:00:00", "title": hook_beat.beat_type.value}]
@@ -215,9 +337,11 @@ class VideoPipelineV3:
                 update={"duration_seconds": segment.duration_seconds + 0.3}
             )
 
-        log.info("Fetching scene images from Pexels...")
-        beat_images = self.image_engine.prefetch_all(beats, topic.title_ta)
-        log.info("Images ready: %d", len(beat_images))
+        log.info("Fetching fallback photos from Pexels...")
+        fallback_photos = self.image_engine.prefetch_fallback_photos(
+            beats, topic.title_ta, run_dir / "fallback_images"
+        )
+        log.info("Fallback photos ready: %d", len(fallback_photos))
 
         log.info("Rendering intro card...")
         intro_frames_raw = render_intro_frames(
@@ -229,177 +353,16 @@ class VideoPipelineV3:
         intro_frames = resample_intro_frames(intro_frames_raw, RENDER_FPS)
         log.info("Intro: %d frames (resampled from %d)", len(intro_frames), len(intro_frames_raw))
 
-        raw_video_path = run_dir / "raw_video.mp4"
-        stock_video_rendered = False
-        hook_frame = None
-
-        if is_stock_video_enabled():
-            log.info("Stock video mode (landscape 1920x1080)...")
-            beat_scenes = build_beat_scenes(beats)
-            stock_cache_dir = run_dir / "stock" / "landscape"
-            landscape_videos = fetch_beat_stock_videos(
-                beats,
-                topic.title_ta,
-                stock_cache_dir,
-                orientation="landscape",
-            )
-            fallback_image_paths = save_beat_images_for_fallback(beat_images, run_dir)
-            content_video_path = run_dir / "stock_content.mp4"
-            stock_body_rendered = build_stock_silent_video(
-                beat_scenes,
-                landscape_videos,
-                fallback_image_paths,
-                1920,
-                1080,
-                content_video_path,
-                output_name=run_id,
-            )
-            if stock_body_rendered:
-                intro_video_path = run_dir / "intro.mp4"
-                if encode_intro_video(intro_frames, intro_video_path, RENDER_FPS):
-                    stock_video_rendered = concat_video_segments(
-                        [intro_video_path, content_video_path],
-                        raw_video_path,
-                    )
-                else:
-                    shutil.copy(content_video_path, raw_video_path)
-                    stock_video_rendered = True
-            if stock_video_rendered:
-                log.info("Stock video rendered (%d beat scenes)", len(beat_scenes))
-            else:
-                log.warning("Stock video failed — falling back to PIL render")
-
-        if not stock_video_rendered:
-            log.info("Rendering frames (%dfps → 24fps output, PIL only)...", RENDER_FPS)
-            all_frame_batches: List[List[np.ndarray]] = []
-            hook_frame = None
-
-            for index, beat in enumerate(beats):
-                segment = narration_bundle.segments[index]
-                image_panel = beat_images.get(index, beat_images.get(0))
-
-                frames = render_scene_frames(
-                    beat_narration=beat.narration_ta,
-                    image_panel=image_panel,
-                    duration_s=beat.duration_seconds,
-                    word_timings=segment.word_timings,
-                    fps=RENDER_FPS,
-                    scene_idx=index,
-                )
-
-                if hook_frame is None and frames:
-                    hook_frame = frames[int(len(frames) * 0.7)]
-
-                all_frame_batches.append(frames)
-                log.info("Scene %d/%d — %d frames", index + 1, len(beats), len(frames))
-
-            log.info("Assembling video...")
-            transition_frames = 4
-
-            enc_cmd = [
-                "ffmpeg", "-y", "-loglevel", "error",
-                "-f", "rawvideo", "-vcodec", "rawvideo",
-                "-s", "1920x1080", "-pix_fmt", "rgb24",
-                "-r", str(RENDER_FPS),
-                "-i", "pipe:0",
-                "-vf", "fps=24",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "23",
-                "-pix_fmt", "yuv420p",
-                str(raw_video_path),
-            ]
-            enc_proc = subprocess.Popen(enc_cmd, stdin=subprocess.PIPE)
-
-            prev_hash = None
-            prev_bytes = None
-
-            def write_frame(frame: np.ndarray) -> None:
-                nonlocal prev_hash, prev_bytes
-                frame_hash = hashlib.md5(frame[::16, ::16].tobytes()).digest()
-                if frame_hash == prev_hash and prev_bytes:
-                    enc_proc.stdin.write(prev_bytes)
-                else:
-                    raw = frame.tobytes()
-                    enc_proc.stdin.write(raw)
-                    prev_hash, prev_bytes = frame_hash, raw
-
-            for frame in intro_frames:
-                write_frame(frame)
-
-            offset_ms = intro_offset_ms()
-            for index, timing in enumerate(narration_bundle.all_word_timings):
-                narration_bundle.all_word_timings[index] = timing.model_copy(
-                    update={
-                        "start_ms": timing.start_ms + offset_ms,
-                        "end_ms": timing.end_ms + offset_ms,
-                    }
-                )
-
-            lower_third_frame_limit = int(3 * RENDER_FPS)
-
-            for batch_index, batch in enumerate(all_frame_batches):
-                beat = beats[batch_index]
-                situation_text = topic.situation[:30] if topic.situation else ""
-                lt_subtitle = beat.on_screen_text or situation_text
-                show_lower_third = batch_index == 0
-
-                def write_batch_frames(frames, start_frame_index=0):
-                    for frame_index, frame in enumerate(frames):
-                        if show_lower_third and (start_frame_index + frame_index) < lower_third_frame_limit:
-                            try:
-                                pil_frame = Image.fromarray(frame)
-                                pil_frame = render_lower_third(
-                                    pil_frame,
-                                    protagonist=beat.protagonist,
-                                    subtitle=lt_subtitle,
-                                    beat_frame=start_frame_index + frame_index,
-                                    total_beat_frames=len(batch),
-                                    fps=RENDER_FPS,
-                                )
-                                frame = np.array(pil_frame)
-                            except Exception as exc:
-                                log.warning("Lower-third render failed: %s", exc)
-                        write_frame(frame)
-
-                if batch_index > 0:
-                    previous_batch = all_frame_batches[batch_index - 1]
-                    tail = (
-                        previous_batch[-transition_frames:]
-                        if len(previous_batch) >= transition_frames
-                        else previous_batch
-                    )
-                    head = batch[:transition_frames]
-                    for transition_index in range(min(len(tail), len(head), transition_frames)):
-                        transition_progress = (transition_index + 1) / transition_frames
-                        blended = render_transition(
-                            tail[transition_index], head[transition_index],
-                            transition_progress, style="flipbook",
-                        )
-                        write_frame(blended)
-                    write_batch_frames(batch[transition_frames:], start_frame_index=transition_frames)
-                else:
-                    write_batch_frames(batch)
-
-            enc_proc.stdin.close()
-            encode_return_code = enc_proc.wait()
-            if encode_return_code != 0:
-                raise RuntimeError(f"Raw video encoding failed (exit code {encode_return_code})")
-        else:
-            offset_ms = intro_offset_ms()
-            for index, timing in enumerate(narration_bundle.all_word_timings):
-                narration_bundle.all_word_timings[index] = timing.model_copy(
-                    update={
-                        "start_ms": timing.start_ms + offset_ms,
-                        "end_ms": timing.end_ms + offset_ms,
-                    }
-                )
-            hook_frame = None
-            try:
-                hook_image = beat_images.get(0)
-                if hook_image is not None:
-                    hook_frame = np.array(hook_image.resize((1280, 720)))
-            except Exception:
-                hook_frame = None
-
+        raw_video_path = render_stock_long_video(
+            run_id=run_id,
+            run_dir=run_dir,
+            beats=beats,
+            topic_title=topic.title_ta,
+            intro_frames=intro_frames,
+            fallback_photos=fallback_photos,
+        )
+        _shift_subtitles_for_intro(narration_bundle)
+        hook_frame = _load_hook_frame(fallback_photos.get(0))
         log.info("Raw video encoded")
 
         total_video_seconds = INTRO_DURATION_S + narration_bundle.total_duration_seconds
@@ -504,7 +467,7 @@ class VideoPipelineV3:
 
         if include_shorts:
             package = self._generate_and_upload_shorts(
-                package, beats, narration_bundle, beat_images, topic, skip_upload, run_dir, run_id
+                package, beats, narration_bundle, fallback_photos, topic, skip_upload, run_dir, run_id
             )
 
         self._finalize_run(topic, daily_slot, run_id)
@@ -517,7 +480,7 @@ class VideoPipelineV3:
         package: VideoPackage,
         beats,
         narration_bundle,
-        beat_images,
+        fallback_photos: dict[int, Path],
         topic: TopicCandidate,
         skip_upload: bool,
         run_dir: Path,
@@ -527,56 +490,18 @@ class VideoPipelineV3:
         try:
             hook_beat = beats[0]
             hook_segment = narration_bundle.segments[0]
-            hook_image = beat_images.get(0)
-            shorts_path = run_dir / "shorts.mp4"
             short_duration_s = min(hook_segment.duration_seconds + 2, 55.0)
-            short_rendered = False
-
-            if is_stock_video_enabled():
-                short_scenes = build_short_scene(short_duration_s)
-                portrait_cache_dir = run_dir / "stock" / "portrait"
-                portrait_videos = fetch_beat_stock_videos(
-                    [hook_beat],
-                    topic.title_ta,
-                    portrait_cache_dir,
-                    orientation="portrait",
-                )
-                fallback_image_paths = save_beat_images_for_fallback({0: hook_image}, run_dir)
-                short_raw_path = run_dir / "shorts_raw.mp4"
-                if build_stock_silent_video(
-                    short_scenes,
-                    portrait_videos,
-                    fallback_image_paths,
-                    1080,
-                    1920,
-                    short_raw_path,
-                    output_name=f"{run_id}_short",
-                ):
-                    short_muxed_path = run_dir / "shorts_muxed.mp4"
-                    if mux_audio_into_video(
-                        short_raw_path,
-                        Path(hook_segment.audio_path),
-                        short_muxed_path,
-                        max_duration_seconds=short_duration_s,
-                    ):
-                        generate_shorts_from_stock(
-                            hook_narration=hook_beat.narration_ta,
-                            stock_video_path=short_muxed_path,
-                            protagonist=topic.protagonist,
-                            output_path=shorts_path,
-                        )
-                        short_rendered = True
-                        log.info("Native portrait Shorts rendered from stock video")
-
-            if not short_rendered:
-                generate_shorts(
-                    hook_narration=hook_beat.narration_ta,
-                    hook_audio_path=Path(hook_segment.audio_path),
-                    hook_image=hook_image,
-                    protagonist=topic.protagonist,
-                    output_path=shorts_path,
-                    duration_s=short_duration_s,
-                )
+            shorts_path = render_portrait_short_video(
+                run_id=run_id,
+                run_dir=run_dir,
+                hook_beat=hook_beat,
+                topic_title=topic.title_ta,
+                hook_narration=hook_beat.narration_ta,
+                protagonist=topic.protagonist,
+                hook_audio_path=Path(hook_segment.audio_path),
+                fallback_photos={0: fallback_photos.get(0, next(iter(fallback_photos.values())))},
+                duration_seconds=short_duration_s,
+            )
             package = package.model_copy(update={"shorts_video_path": str(shorts_path)})
 
             if not skip_upload:

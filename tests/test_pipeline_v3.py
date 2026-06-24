@@ -35,11 +35,8 @@ def test_intro_offset_ms_matches_duration():
     assert intro_offset_ms() == int(INTRO_DURATION_S * 1000)
 
 
-def test_ffmpeg_encode_failure_raises():
-    mock_process = MagicMock()
-    mock_process.stdin = MagicMock()
-    mock_process.wait.return_value = 1
-
+def test_stock_video_failure_raises(tmp_path, monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
     pipeline = VideoPipelineV3()
     hook_beat = StoryBeat(
         beat_type=BeatType.HOOK,
@@ -62,21 +59,23 @@ def test_ffmpeg_encode_failure_raises():
         narration_path="/tmp/narration.mp3",
     )
     pipeline.image_engine = MagicMock()
-    pipeline.image_engine.prefetch_all.return_value = {0: MagicMock()}
+    pipeline.image_engine.prefetch_fallback_photos.return_value = {
+        0: tmp_path / "beat_0.jpg",
+    }
+    (tmp_path / "beat_0.jpg").write_bytes(b"fake")
 
-    with patch("src.pipelines.generate_video_v3.subprocess.Popen", return_value=mock_process):
-        with patch("src.pipelines.generate_video_v3.render_scene_frames", return_value=[np.zeros((1080, 1920, 3), dtype=np.uint8)]):
-            with patch("src.pipelines.generate_video_v3.render_intro_frames", return_value=_make_intro_frames()):
-                with pytest.raises(RuntimeError, match="Raw video encoding failed"):
-                    pipeline._run_long_video(
-                        run_id="test_run",
-                        run_dir=Path("/tmp/test_run"),
-                        topic=TopicCandidate(title_ta="Test"),
-                        research=MagicMock(),
-                        skip_upload=True,
-                        daily_slot=None,
-                        include_shorts=False,
-                    )
+    with patch("src.pipelines.generate_video_v3.render_intro_frames", return_value=_make_intro_frames()):
+        with patch("src.pipelines.generate_video_v3.build_stock_silent_video", return_value=False):
+            with pytest.raises(RuntimeError, match="Stock video rendering failed"):
+                pipeline._run_long_video(
+                    run_id="test_run",
+                    run_dir=tmp_path,
+                    topic=TopicCandidate(title_ta="Test"),
+                    research=MagicMock(),
+                    skip_upload=True,
+                    daily_slot=None,
+                    include_shorts=False,
+                )
 
 
 def test_video_format_short_routes_to_shorts_only():
@@ -98,7 +97,7 @@ def test_video_format_short_routes_to_shorts_only():
                 assert result.format == "short"
 
 
-def test_shorts_package_path_set_without_upload():
+def test_shorts_package_path_set_without_upload(tmp_path):
     pipeline = VideoPipelineV3()
     topic = TopicCandidate(title_ta="Test topic", protagonist="Hero")
     package = VideoPackage(
@@ -117,22 +116,25 @@ def test_shorts_package_path_set_without_upload():
     narration_bundle = MagicMock()
     narration_bundle.segments = [MagicMock(duration_seconds=10.0, audio_path="/tmp/hook.mp3")]
 
-    with patch("src.pipelines.generate_video_v3.generate_shorts", return_value=Path("/tmp/shorts.mp4")):
+    with patch(
+        "src.pipelines.generate_video_v3.render_portrait_short_video",
+        return_value=tmp_path / "shorts.mp4",
+    ):
         updated = pipeline._generate_and_upload_shorts(
             package=package,
             beats=[hook_beat],
             narration_bundle=narration_bundle,
-            beat_images={0: MagicMock()},
+            fallback_photos={0: tmp_path / "beat_0.jpg"},
             topic=topic,
             skip_upload=True,
-            run_dir=Path("/tmp/run"),
+            run_dir=tmp_path,
             run_id="run1",
         )
 
-    assert updated.shorts_video_path == str(Path("/tmp/run/shorts.mp4"))
+    assert updated.shorts_video_path == str(tmp_path / "shorts.mp4")
 
 
-def test_shorts_upload_uses_upload_shorts():
+def test_shorts_upload_uses_upload_shorts(tmp_path):
     pipeline = VideoPipelineV3()
     pipeline.uploader = MagicMock()
     topic = TopicCandidate(title_ta="Test topic", protagonist="Hero")
@@ -155,15 +157,18 @@ def test_shorts_upload_uses_upload_shorts():
     narration_bundle = MagicMock()
     narration_bundle.segments = [MagicMock(duration_seconds=10.0, audio_path="/tmp/hook.mp3")]
 
-    with patch("src.pipelines.generate_video_v3.generate_shorts", return_value=Path("/tmp/shorts.mp4")):
+    with patch(
+        "src.pipelines.generate_video_v3.render_portrait_short_video",
+        return_value=tmp_path / "shorts.mp4",
+    ):
         pipeline._generate_and_upload_shorts(
             package=package,
             beats=[hook_beat],
             narration_bundle=narration_bundle,
-            beat_images={0: MagicMock()},
+            fallback_photos={0: tmp_path / "beat_0.jpg"},
             topic=topic,
             skip_upload=False,
-            run_dir=Path("/tmp/run"),
+            run_dir=tmp_path,
             run_id="run1",
         )
 

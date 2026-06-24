@@ -46,6 +46,12 @@ def test_is_stock_video_enabled_requires_api_key(monkeypatch):
     assert is_stock_video_enabled() is True
 
 
+def test_stock_video_disabled_by_env(monkeypatch):
+    monkeypatch.setenv("PEXELS_API_KEY", "test-key")
+    monkeypatch.setenv("USE_STOCK_VIDEO", "false")
+    assert is_stock_video_enabled() is False
+
+
 @patch("src.renderer.stock_video_engine._download_stock_video_file", return_value=True)
 @patch("src.renderer.stock_video_engine._search_pexels_video_url", return_value="https://example.com/v.mp4")
 def test_fetch_beat_stock_videos_downloads_per_beat(mock_search, mock_download, tmp_path, monkeypatch):

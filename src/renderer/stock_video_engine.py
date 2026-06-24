@@ -9,13 +9,13 @@ import subprocess
 import urllib.parse
 import urllib.request
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
 from src.image_engine.image_engine import _build_query
 
 log = logging.getLogger(__name__)
 
-USE_STOCK_VIDEO = os.environ.get("USE_STOCK_VIDEO", "false").lower() in ("true", "1", "yes")
+USE_STOCK_VIDEO = os.environ.get("USE_STOCK_VIDEO", "true").lower() not in ("false", "0", "no")
 PEXELS_API_KEY = os.environ.get("PEXELS_API_KEY", "")
 PEXELS_VIDEOS_SEARCH_URL = "https://api.pexels.com/videos/search"
 MIN_STOCK_VIDEO_WIDTH = 720
@@ -27,7 +27,14 @@ KB_PAN_CENTER = "ih/2-(ih/zoom/2)"
 
 
 def is_stock_video_enabled() -> bool:
-    return USE_STOCK_VIDEO and bool(PEXELS_API_KEY)
+    return bool(PEXELS_API_KEY) and USE_STOCK_VIDEO
+
+
+def require_stock_video_enabled() -> None:
+    if not PEXELS_API_KEY:
+        raise RuntimeError("PEXELS_API_KEY is required for stock video rendering")
+    if not USE_STOCK_VIDEO:
+        raise RuntimeError("USE_STOCK_VIDEO is disabled")
 
 
 def build_beat_scenes(beats: Sequence) -> List[Dict]:
@@ -390,22 +397,3 @@ def mux_audio_into_video(
         command.insert(command.index("-t") + 1, f"{max_duration_seconds:.3f}")
     result = subprocess.run(command, capture_output=True, text=True, timeout=300)
     return result.returncode == 0 and output_path.exists()
-
-
-def save_beat_images_for_fallback(
-    beat_images: Dict[int, object],
-    run_dir: Path,
-) -> List[Path]:
-    """Persist beat sketch panels as PNGs for Ken Burns fallback."""
-    fallback_paths: List[Path] = []
-    images_dir = run_dir / "fallback_images"
-    images_dir.mkdir(parents=True, exist_ok=True)
-    for beat_index in sorted(beat_images.keys()):
-        image_panel = beat_images[beat_index]
-        image_path = images_dir / f"beat_{beat_index}.png"
-        try:
-            image_panel.save(image_path)
-            fallback_paths.append(image_path)
-        except Exception as exc:
-            log.warning("Could not save fallback image for beat %d: %s", beat_index, exc)
-    return fallback_paths

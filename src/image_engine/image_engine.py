@@ -1,77 +1,68 @@
-"""Image engine — fetch relevant photo from Pexels, convert to sketch style.
-
-Each story beat gets one image:
-  1. Build a search query from beat keywords + topic
-  2. Fetch best match from Pexels (free, already has API key in secrets)
-  3. Apply PIL sketch filter: grayscale → edge enhance → high contrast
-  4. Result looks like a hand-drawn whiteboard illustration
-
-Falls back to a clean gradient placeholder if Pexels fails.
-"""
+"""Image engine — fetch Pexels photos for Ken Burns fallback (no sketch filter)."""
 
 from __future__ import annotations
 
 import io
+import json
 import logging
 import os
 import time
-import urllib.request
 import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Optional
 
-from PIL import Image, ImageEnhance, ImageFilter, ImageOps
+from PIL import Image
 
 log = logging.getLogger(__name__)
 
-PEXELS_API = "https://api.pixabay.com/api/"  # pixabay is free no-key
 PEXELS_BASE = "https://api.pexels.com/v1/search"
-
-# Fallback: pixabay has a free tier with no key for low-res
-PIXABAY_BASE = "https://pixabay.com/api/"
-PIXABAY_KEY = os.environ.get("PIXABAY_API_KEY", "")
-
-PANEL_W = 860
-PANEL_H = 660
-_CACHE: dict[str, Image.Image] = {}
+FALLBACK_IMAGE_WIDTH = 1920
+FALLBACK_IMAGE_HEIGHT = 1080
 
 
 def _pexels_key() -> str:
     return os.environ.get("PEXELS_API_KEY", "")
 
 
-def _fetch_pexels(query: str, orientation: str = "landscape") -> Optional[bytes]:
+def _fetch_pexels_photo(query: str, orientation: str = "landscape") -> Optional[bytes]:
     key = _pexels_key()
     if not key:
         return None
     try:
         encoded = urllib.parse.quote(query)
-        url = f"{PEXELS_BASE}?query={encoded}&per_page=3&orientation={orientation}&size=medium"
-        req = urllib.request.Request(url, headers={
-            "Authorization": key,
-            "User-Agent": "ThulirBot/1.0",
-        })
-        with urllib.request.urlopen(req, timeout=20) as r:
-            import json
-            data = json.loads(r.read())
+        url = f"{PEXELS_BASE}?query={encoded}&per_page=3&orientation={orientation}&size=large"
+        request = urllib.request.Request(
+            url,
+            headers={"Authorization": key, "User-Agent": "ThulirBot/1.0"},
+        )
+        with urllib.request.urlopen(request, timeout=20) as response:
+            data = json.loads(response.read())
         photos = data.get("photos", [])
         if not photos:
             return None
-        # Pick middle result for more variety
         photo = photos[min(1, len(photos) - 1)]
-        img_url = photo["src"]["medium"]
-        req2 = urllib.request.Request(img_url, headers={"User-Agent": "ThulirBot/1.0"})
-        with urllib.request.urlopen(req2, timeout=20) as r2:
-            return r2.read()
+        image_url = (
+            photo.get("src", {}).get("large2x")
+            or photo.get("src", {}).get("large")
+            or photo.get("src", {}).get("medium")
+        )
+        if not image_url:
+            return None
+        image_request = urllib.request.Request(
+            image_url,
+            headers={"User-Agent": "ThulirBot/1.0"},
+        )
+        with urllib.request.urlopen(image_request, timeout=30) as image_response:
+            return image_response.read()
     except Exception as exc:
-        log.warning("Pexels fetch failed for '%s': %s", query, exc)
+        log.warning("Pexels photo fetch failed for '%s': %s", query, exc)
         return None
 
 
 def _build_query(beat_keywords: list[str], topic_title: str, beat_type: str) -> str:
     """Build a focused Pexels search query from story context."""
-    # Priority: specific visual keywords from the beat
-    kw_map = {
+    keyword_map = {
         "rejection": "man rejected paperwork",
         "தோல்வி": "failure disappointment person",
         "வெற்றி": "success celebration achievement",
@@ -99,13 +90,12 @@ def _build_query(beat_keywords: list[str], topic_title: str, beat_type: str) -> 
         "farm": "farm agriculture crops",
     }
 
-    for kw in beat_keywords:
-        kl = kw.lower()
-        for key, query in kw_map.items():
-            if key in kl:
+    for keyword in beat_keywords:
+        keyword_lower = keyword.lower()
+        for key, query in keyword_map.items():
+            if key in keyword_lower:
                 return query
 
-    # Fallback: use topic protagonist + beat type emotion
     beat_emotion_query = {
         "hook": "determined person closeup",
         "conflict": "struggle difficulty person",
@@ -116,139 +106,99 @@ def _build_query(beat_keywords: list[str], topic_title: str, beat_type: str) -> 
         "cta": "motivated inspired person",
         "context": "story background scene",
     }
-    base = beat_emotion_query.get(beat_type, "person story moment")
+    base_query = beat_emotion_query.get(beat_type, "person story moment")
 
-    # Use protagonist name if ASCII and meaningful (not No.1, Ltd, vs, etc.)
-    _SKIP = {"no.1","no1","ltd","inc","pvt","vs","the","and","for","with",
-              "from","into","that","this","your","their","about","more"}
+    skip_words = {
+        "no.1", "no1", "ltd", "inc", "pvt", "vs", "the", "and", "for", "with",
+        "from", "into", "that", "this", "your", "their", "about", "more",
+    }
     title_words = [
-        w for w in topic_title.split()
-        if w.isascii() and len(w) > 3 and w.lower().strip(".,!?") not in _SKIP
-        and not w.replace(".","").replace("-","").isdigit()
+        word for word in topic_title.split()
+        if word.isascii() and len(word) > 3 and word.lower().strip(".,!?") not in skip_words
+        and not word.replace(".", "").replace("-", "").isdigit()
     ]
     if title_words:
-        return f"{title_words[0]} {base}"
-    return base
+        return f"{title_words[0]} {base_query}"
+    return base_query
 
 
-def _to_sketch(img: Image.Image, panel_w: int = PANEL_W, panel_h: int = PANEL_H) -> Image.Image:
-    """Convert photo to whiteboard sketch style."""
-    # 1. Resize to panel with letterboxing
-    img = ImageOps.fit(img, (panel_w, panel_h), Image.LANCZOS)
-
-    # 2. Grayscale
-    img = img.convert("L")
-
-    # 3. Invert for pencil-on-paper look
-    inverted = ImageOps.invert(img)
-
-    # 4. Gaussian blur the inverted
-    blurred = inverted.filter(ImageFilter.GaussianBlur(radius=14))
-
-    # 5. Dodge blend: img / (1 - blurred) — classic sketch effect
-    import numpy as np
-    arr_img = np.array(img, dtype=np.float32)
-    arr_blur = np.array(blurred, dtype=np.float32)
-    # Avoid division by zero
-    divisor = 255.0 - arr_blur
-    divisor = np.clip(divisor, 1.0, 255.0)
-    sketch = np.clip((arr_img * 255.0) / divisor, 0, 255).astype(np.uint8)
-    sketch_img = Image.fromarray(sketch, mode="L")
-
-    # 6. Increase contrast for bolder lines
-    sketch_img = ImageEnhance.Contrast(sketch_img).enhance(2.2)
-
-    # 7. Slightly darken lines (sketch on paper = dark lines, light bg)
-    sketch_img = ImageEnhance.Brightness(sketch_img).enhance(1.1)
-
-    # 8. Convert back to RGB (cream paper background tint)
-    rgb = Image.new("RGB", (panel_w, panel_h), (252, 250, 244))
-    # Paste sketch as dark lines (where sketch is dark, show ink)
-    mask_arr = np.array(sketch_img)
-    # Lines are dark in sketch → use as alpha for dark ink overlay
-    ink_alpha = np.clip(255 - mask_arr, 0, 255).astype(np.uint8)
-    ink_layer = Image.new("RGBA", (panel_w, panel_h), (25, 20, 15, 0))
-    ink_layer.putalpha(Image.fromarray(ink_alpha))
-    rgb.paste(Image.new("RGB", (panel_w, panel_h), (25, 20, 15)), mask=Image.fromarray(ink_alpha))
-
-    return rgb
+def _save_fallback_photo(
+    photo_bytes: bytes,
+    output_path: Path,
+    width: int = FALLBACK_IMAGE_WIDTH,
+    height: int = FALLBACK_IMAGE_HEIGHT,
+) -> Path:
+    photo = Image.open(io.BytesIO(photo_bytes)).convert("RGB")
+    photo = photo.resize((width, height), Image.LANCZOS)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    photo.save(output_path, format="JPEG", quality=90)
+    return output_path
 
 
-def _placeholder(panel_w: int = PANEL_W, panel_h: int = PANEL_H,
-                 beat_type: str = "neutral") -> Image.Image:
-    """Clean gradient placeholder when no image available."""
-    COLORS = {
-        "hook":          [(252, 248, 235), (245, 238, 215)],
-        "conflict":      [(245, 240, 250), (235, 228, 245)],
-        "escalation":    [(250, 240, 235), (242, 228, 220)],
-        "turning_point": [(235, 248, 240), (220, 240, 230)],
-        "resolution":    [(240, 250, 240), (220, 242, 220)],
-        "lesson":        [(248, 248, 235), (238, 238, 215)],
+def _placeholder_photo(output_path: Path, beat_type: str = "neutral") -> Path:
+    color_map = {
+        "hook": (245, 238, 215),
+        "conflict": (235, 228, 245),
+        "escalation": (242, 228, 220),
+        "turning_point": (220, 240, 230),
+        "resolution": (220, 242, 220),
+        "lesson": (238, 238, 215),
     }
-    top, bot = COLORS.get(beat_type, [(252, 250, 244), (244, 242, 232)])
-    img = Image.new("RGB", (panel_w, panel_h), top)
-    # Simple vertical gradient
-    import numpy as np
-    arr = np.zeros((panel_h, panel_w, 3), dtype=np.uint8)
-    for y in range(panel_h):
-        t = y / panel_h
-        for c in range(3):
-            arr[y, :, c] = int(top[c] * (1 - t) + bot[c] * t)
-    return Image.fromarray(arr)
+    fill_color = color_map.get(beat_type, (244, 242, 232))
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (FALLBACK_IMAGE_WIDTH, FALLBACK_IMAGE_HEIGHT), fill_color).save(
+        output_path,
+        format="JPEG",
+        quality=90,
+    )
+    return output_path
 
 
 class ImageEngine:
-    """Fetch and sketch-convert one image per story beat."""
+    """Fetch raw Pexels photos for Ken Burns fallback when a stock clip is unavailable."""
 
     def __init__(self) -> None:
-        self._cache: dict[str, Image.Image] = {}
+        self._cache: dict[str, Path] = {}
 
-    def get_beat_image(
-        self,
-        beat_keywords: list[str],
-        topic_title: str,
-        beat_type: str,
-        cache_key: str,
-        panel_w: int = PANEL_W,
-        panel_h: int = PANEL_H,
-    ) -> Image.Image:
-        if cache_key in self._cache:
-            return self._cache[cache_key]
-
-        query = _build_query(beat_keywords, topic_title, beat_type)
-        log.info("Image search: '%s' (beat=%s)", query, beat_type)
-
-        raw = _fetch_pexels(query)
-        if raw:
-            try:
-                photo = Image.open(io.BytesIO(raw)).convert("RGB")
-                sketch = _to_sketch(photo, panel_w, panel_h)
-                self._cache[cache_key] = sketch
-                log.info("✅ Sketch image ready for beat '%s'", beat_type)
-                return sketch
-            except Exception as exc:
-                log.warning("Sketch conversion failed: %s", exc)
-
-        # Fallback
-        fallback = _placeholder(panel_w, panel_h, beat_type)
-        self._cache[cache_key] = fallback
-        return fallback
-
-    def prefetch_all(
+    def prefetch_fallback_photos(
         self,
         beats: list,
         topic_title: str,
-    ) -> dict[int, Image.Image]:
-        """Fetch all beat images upfront (before render loop) to avoid CI latency."""
-        results: dict[int, Image.Image] = {}
-        for i, beat in enumerate(beats):
-            key = f"beat_{i}_{beat.beat_type.value}"
-            img = self.get_beat_image(
-                beat_keywords=beat.visual_keywords,
-                topic_title=topic_title,
-                beat_type=beat.beat_type.value,
-                cache_key=key,
+        output_dir: Path,
+    ) -> dict[int, Path]:
+        """Download one landscape photo per beat for Ken Burns fallback."""
+        output_dir.mkdir(parents=True, exist_ok=True)
+        results: dict[int, Path] = {}
+
+        for beat_index, beat in enumerate(beats):
+            cache_key = f"beat_{beat_index}_{beat.beat_type.value}"
+            if cache_key in self._cache and self._cache[cache_key].exists():
+                results[beat_index] = self._cache[cache_key]
+                continue
+
+            query = _build_query(
+                beat.visual_keywords,
+                topic_title,
+                beat.beat_type.value,
             )
-            results[i] = img
-            time.sleep(0.3)  # gentle rate limit
+            output_path = output_dir / f"beat_{beat_index}.jpg"
+            log.info("Photo fallback search: '%s' (beat=%s)", query, beat.beat_type.value)
+
+            photo_bytes = _fetch_pexels_photo(query, orientation="landscape")
+            if photo_bytes:
+                try:
+                    saved_path = _save_fallback_photo(photo_bytes, output_path)
+                    self._cache[cache_key] = saved_path
+                    results[beat_index] = saved_path
+                    log.info("Fallback photo ready for beat '%s'", beat.beat_type.value)
+                except Exception as exc:
+                    log.warning("Fallback photo save failed: %s", exc)
+
+            if beat_index not in results:
+                placeholder_path = _placeholder_photo(output_path, beat.beat_type.value)
+                self._cache[cache_key] = placeholder_path
+                results[beat_index] = placeholder_path
+
+            time.sleep(0.2)
+
         return results
