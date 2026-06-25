@@ -451,8 +451,7 @@ class VideoPipelineV3:
                 try: package = package.model_copy(update={"youtube_url": yt_url})
                 except: pass
             except Exception as exc:
-                log.error("Upload FAILED: %s", exc)
-                raise
+                log.error("Upload FAILED (continuing): %s", exc)
 
         package = VideoPackage(
             run_id=run_id,
@@ -527,11 +526,7 @@ class VideoPipelineV3:
                 )
                 log.info("✅ Shorts uploaded — linked to full video")
         except Exception as exc:
-            if skip_upload:
-                log.warning("Shorts generation failed: %s", exc)
-            else:
-                log.error("Shorts generation/upload failed: %s", exc)
-                raise
+            log.warning("Shorts generation/upload issue (continuing): %s", exc)
         return package
 
     def _finalize_run(
