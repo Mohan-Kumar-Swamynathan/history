@@ -97,8 +97,13 @@ jobs:
             echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
           fi
 
+      - name: Validate YouTube token
+        if: github.event.inputs.upload != 'false'
+        run: python3 scripts/validate_youtube_token.py
+
       - name: Generate + upload (morning)
         run: |
+          set -o pipefail
           UPLOAD_FLAG=""
           if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
@@ -106,7 +111,7 @@ jobs:
           python generate_video.py \
             --format long \
             --daily-slot morning_long \
-            $UPLOAD_FLAG 2>&1 | tee /tmp/run.log || (cat /tmp/run.log; exit 1)
+            $UPLOAD_FLAG 2>&1 | tee /tmp/run.log
 
       - name: Upload run artifacts
         if: always()
@@ -172,6 +177,10 @@ jobs:
           if [ -n "$CLIENT_SECRETS_BASE64" ]; then
             echo "$CLIENT_SECRETS_BASE64" | base64 -d > client_secrets.json || true
           fi
+
+      - name: Validate YouTube token
+        if: github.event.inputs.upload != 'false'
+        run: python3 scripts/validate_youtube_token.py
 
       - name: Generate + upload (evening)
         run: |
