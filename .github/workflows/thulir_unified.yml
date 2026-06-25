@@ -98,14 +98,21 @@ jobs:
           fi
 
       - name: Validate YouTube token
+        id: youtube_token
         if: github.event.inputs.upload != 'false'
-        run: python3 scripts/validate_youtube_token.py
+        run: |
+          if python3 scripts/validate_youtube_token.py; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::YouTube token invalid — will generate video without upload"
+          fi
 
       - name: Generate + upload (morning)
         run: |
           set -o pipefail
           UPLOAD_FLAG=""
-          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
+          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ] && [ "${{ steps.youtube_token.outputs.valid || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
           python generate_video.py \
@@ -179,19 +186,27 @@ jobs:
           fi
 
       - name: Validate YouTube token
+        id: youtube_token
         if: github.event.inputs.upload != 'false'
-        run: python3 scripts/validate_youtube_token.py
+        run: |
+          if python3 scripts/validate_youtube_token.py; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "valid=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::YouTube token invalid — will generate video without upload"
+          fi
 
       - name: Generate + upload (evening)
         run: |
+          set -o pipefail
           UPLOAD_FLAG=""
-          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ]; then
+          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ] && [ "${{ steps.youtube_token.outputs.valid || 'true' }}" = "true" ]; then
             UPLOAD_FLAG="--upload"
           fi
           python generate_video.py \
             --format long \
             --daily-slot evening_long \
-            $UPLOAD_FLAG
+            $UPLOAD_FLAG 2>&1 | tee /tmp/run.log
 
       - name: Upload run artifacts
         if: always()
