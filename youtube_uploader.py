@@ -40,6 +40,10 @@ def _load_credentials_from_bytes(token_bytes: bytes):
     if hasattr(creds, "refresh") and creds.expired and creds.refresh_token:
         try:
             creds.refresh(Request())
+            log.info("YouTube token refreshed successfully — persisting to secrets")
+            _persist_refreshed_token(creds)
+        except RuntimeError:
+            raise
         except Exception as exc:
             raise RuntimeError(
                 "YouTube token expired and refresh failed. Re-run "
@@ -47,6 +51,63 @@ def _load_credentials_from_bytes(token_bytes: bytes):
             ) from exc
     return creds
 
+
+
+def _persist_refreshed_token(creds) -> None:
+    """Push refreshed token back to GitHub Secrets so next run works."""
+    import urllib.request
+    from base64 import b64encode
+    from nacl import bindings, encoding
+
+    token_bytes = pickle.dumps(creds)
+    token_b64 = base64.b64encode(token_bytes).decode()
+
+    repo = os.environ.get("GITHUB_REPOSITORY", "Mohan-Kumar-Swamynathan/history")
+    pat = os.environ.get("GH_PAT_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+    if not pat:
+        log.warning("No PAT available — cannot persist refreshed YouTube token to secrets")
+        return
+
+    headers = {
+        "Authorization": f"token {pat}",
+        "Accept": "application/vnd.github+json",
+        "Content-Type": "application/json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    # Get repo public key
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/actions/secrets/public-key",
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(req) as r:
+            key_data = json.loads(r.read())
+    except Exception as exc:
+        log.warning(f"Failed to fetch GitHub public key: {exc}")
+        return
+
+    # Encrypt using libsodium sealed box
+    pub_key_bytes = base64.b64decode(key_data["key"])
+    encrypted = bindings.crypto_box_seal(token_b64.encode(), pub_key_bytes)
+    encrypted_b64 = b64encode(encrypted).decode()
+
+    # Update secret
+    payload = json.dumps({
+        "encrypted_value": encrypted_b64,
+        "key_id": key_data["key_id"],
+    }).encode()
+    req = urllib.request.Request(
+        f"https://api.github.com/repos/{repo}/actions/secrets/YOUTUBE_TOKEN_BASE64",
+        data=payload,
+        headers=headers,
+        method="PUT",
+    )
+    try:
+        urllib.request.urlopen(req)
+        log.info("✅ Refreshed YouTube token persisted back to GitHub Secrets")
+    except Exception as exc:
+        log.warning(f"Failed to persist refreshed token to GitHub Secrets: {exc}")
 
 def _load_credentials_from_token():
     raw = os.environ.get("YOUTUBE_TOKEN_BASE64", "")
