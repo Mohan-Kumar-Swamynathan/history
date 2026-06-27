@@ -12,3 +12,4 @@ opencv-python-headless>=4.8.0
 pytest>=7.4.0
 
 pytrends>=4.9.2
+PyNaCl>=1.5.0
