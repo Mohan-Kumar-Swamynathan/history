@@ -112,7 +112,7 @@ jobs:
         run: |
           set -o pipefail
           UPLOAD_FLAG=""
-          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ] && [ "${{ steps.youtube_token.outputs.valid || 'true' }}" = "true" ]; then
+          if [ "${{ github.event.inputs.upload || 'true' }}" != "false" ] && [ -f youtube_token.pickle ]; then
             UPLOAD_FLAG="--upload"
           fi
           python generate_video.py \
@@ -200,7 +200,7 @@ jobs:
         run: |
           set -o pipefail
           UPLOAD_FLAG=""
-          if [ "${{ github.event.inputs.upload || 'true' }}" = "true" ] && [ "${{ steps.youtube_token.outputs.valid || 'true' }}" = "true" ]; then
+          if [ "${{ github.event.inputs.upload || 'true' }}" != "false" ] && [ -f youtube_token.pickle ]; then
             UPLOAD_FLAG="--upload"
           fi
           python generate_video.py \
