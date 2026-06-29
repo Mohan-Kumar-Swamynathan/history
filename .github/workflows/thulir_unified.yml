@@ -136,6 +136,7 @@ jobs:
           # Force-add upload state files (they may have changed during upload)
           git add -f data/topic_history.json 2>/dev/null || true
           git add -f upload_state.json 2>/dev/null || true
+          git add -f upload_error.log 2>/dev/null || true
           git add -f output/state/ 2>/dev/null || true
           git add -f .keepalive 2>/dev/null || true
           git status --short
@@ -224,6 +225,7 @@ jobs:
           # Force-add upload state files (they may have changed during upload)
           git add -f data/topic_history.json 2>/dev/null || true
           git add -f upload_state.json 2>/dev/null || true
+          git add -f upload_error.log 2>/dev/null || true
           git add -f output/state/ 2>/dev/null || true
           git add -f .keepalive 2>/dev/null || true
           git status --short
