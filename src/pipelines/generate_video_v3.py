@@ -450,8 +450,24 @@ class VideoPipelineV3:
                 log.info("Uploaded: %s", yt_url)
                 try: package = package.model_copy(update={"youtube_url": yt_url})
                 except: pass
+                # Clear any previous error log on success
+                try:
+                    (PROJECT_ROOT / "upload_error.log").unlink(missing_ok=True)
+                except Exception:
+                    pass
             except Exception as exc:
-                log.error("Upload FAILED (continuing): %s", exc)
+                # Write error to repo-tracked file so we can see it in commits
+                try:
+                    from datetime import datetime as _dt
+                    err_log = PROJECT_ROOT / "upload_error.log"
+                    with open(err_log, "a", encoding="utf-8") as _ef:
+                        _ef.write(f"[{_dt.utcnow().isoformat()}] UPLOAD ERROR: {exc}\n")
+                        _ef.write(f"  Topic: {topic.title_ta}\n")
+                        _ef.write(f"  Slug: {slug}\n\n")
+                except Exception:
+                    pass
+                log.error("Upload FAILED: %s", exc)
+                raise RuntimeError(f"YouTube upload failed: {exc}") from exc
 
         package = VideoPackage(
             run_id=run_id,
