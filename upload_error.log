@@ -30,3 +30,7 @@
   Topic: இந்த இளைஞரைக் கேலி செய்தார்கள். இன்று இந்தியாவின் கண்-காட்சியைக் கட்டுப்படுத்துகிறார்!
   Slug: 67b034010175
 
+[2026-07-03T15:53:25.220757] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: ஒரு கிராமத்து மனிதர் இந்தியாவின் sanitary napkin புரட்சி உருவாக்கினார்!
+  Slug: bfb7af5679ee
+
