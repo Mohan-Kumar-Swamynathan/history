@@ -46,3 +46,7 @@
   Topic: ஒரு ரயில் டிக்கெட் கிடைக்கவில்லை. ஆனா இன்று Paytm-க்கு பில்லியன் பேர்கள்!
   Slug: 0348c7723591
 
+[2026-07-05T15:03:59.320856] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: இந்த மொழி பேசும் பெண்... இந்தியாவின் மறைந்த IT மில்லியனேர்!
+  Slug: 651040f02144
+
