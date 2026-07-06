@@ -50,3 +50,7 @@
   Topic: இந்த மொழி பேசும் பெண்... இந்தியாவின் மறைந்த IT மில்லியனேர்!
   Slug: 651040f02144
 
+[2026-07-06T06:11:06.048647] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: பணமில்லாத குடிசையிலிருந்து உலக விந்தணிதான்: Sabyasachi-ன் அதிசய சேர்க்கை
+  Slug: 5f28308eb773
+
