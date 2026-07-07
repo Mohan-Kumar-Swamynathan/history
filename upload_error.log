@@ -62,3 +62,7 @@
   Topic: 10-ம் வகுப்பு விட்டுவிட்டு, இந்தியாவின் இளைஞர் பில்லியனாயர்!
   Slug: 789c24efd079
 
+[2026-07-07T16:15:49.455118] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: இந்த எண் இந்தியாவை மாற்றியது. ஆனால் அதை யாரும் நம்பவில்லை.
+  Slug: b9e7d5b44427
+
