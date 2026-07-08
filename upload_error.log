@@ -66,3 +66,7 @@
   Topic: இந்த எண் இந்தியாவை மாற்றியது. ஆனால் அதை யாரும் நம்பவில்லை.
   Slug: b9e7d5b44427
 
+[2026-07-08T04:49:23.496130] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: பள்ளி விட்டபின் உலகம் மாற்றிய இளைஞன்: Nikhil Kamath
+  Slug: 0d3434987902
+
