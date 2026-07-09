@@ -74,3 +74,7 @@
   Topic: பங்குசந்தையை வென்ற 'மௌன' கோடீஸ்வரர்: D-Mart-ன் ரகசியம்
   Slug: 9312e177c6b9
 
+[2026-07-09T05:51:09.211387] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: சூப்பர் 30: ஒரு கழிவறையில் இருந்து இந்தியாவின் டாப் 30 மாணவர்களை உருவாக்கியவர்
+  Slug: 4382b8b179a7
+
