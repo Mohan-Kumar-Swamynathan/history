@@ -102,3 +102,7 @@
   Topic: பள்ளிக்கூடம் விட்டுவிட்டு, இந்தியாவின் இளம் கோடீஸ்வரர்
   Slug: 02b72f91af99
 
+[2026-07-12T15:02:43.665594] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: உபரை உருவாக்கியது. அதைத்தான் தானே அழித்தார்!
+  Slug: 78a19430adc6
+
