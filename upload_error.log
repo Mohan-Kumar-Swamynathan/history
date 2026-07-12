@@ -98,3 +98,7 @@
   Topic: ஐடி மன்னர்கள் நகரத்தில் – இவன் கிராமத்திலிருந்து உலகம் வென்றான்!
   Slug: d1c9fb4a7953
 
+[2026-07-12T04:59:57.060590] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: பள்ளிக்கூடம் விட்டுவிட்டு, இந்தியாவின் இளம் கோடீஸ்வரர்
+  Slug: 02b72f91af99
+
