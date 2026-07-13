@@ -106,3 +106,7 @@
   Topic: உபரை உருவாக்கியது. அதைத்தான் தானே அழித்தார்!
   Slug: 78a19430adc6
 
+[2026-07-13T05:08:22.863663] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: இவர் போய் நாணயமில்லாமல் வாழ்ந்தார். இன்று ஆயிரக்கணக்கானோர் இந்தியாவை நகைக்கு மாற்றினார்!
+  Slug: 1da279c912e5
+
