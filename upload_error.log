@@ -110,3 +110,7 @@
   Topic: இவர் போய் நாணயமில்லாமல் வாழ்ந்தார். இன்று ஆயிரக்கணக்கானோர் இந்தியாவை நகைக்கு மாற்றினார்!
   Slug: 1da279c912e5
 
+[2026-07-13T16:20:20.282580] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: பாட்டியின் எண்ணெய். உலகத்துக்கே வியப்பான மாற்றம்.
+  Slug: b155c29faa49
+
