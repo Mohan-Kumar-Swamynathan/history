@@ -114,3 +114,7 @@
   Topic: பாட்டியின் எண்ணெய். உலகத்துக்கே வியப்பான மாற்றம்.
   Slug: b155c29faa49
 
+[2026-07-14T04:39:27.750944] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: IBM-ஐ மீட்டு உலக வரலாற்றையே மாற்றிய தமிழன்!
+  Slug: cfddeeb07831
+
