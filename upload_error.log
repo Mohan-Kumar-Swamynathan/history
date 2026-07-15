@@ -126,3 +126,7 @@
   Topic: படிப்பை விட்டு, 17-ல் வேலைக்கு, 24-ல் கோடி கோடியில் — இந்தியாவின் ஜெரோதை உருவாக்கிய நிகில் கமத்
   Slug: 1d3fe2f65e30
 
+[2026-07-15T15:23:22.621013] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: AI-யை உருவாக்கும் தமிழச்சி: 3 முறைகள் தோல்வி, ஆனாலும் உலகம் வென்றார்!
+  Slug: 32f3554e6831
+
