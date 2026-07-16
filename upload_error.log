@@ -130,3 +130,7 @@
   Topic: AI-யை உருவாக்கும் தமிழச்சி: 3 முறைகள் தோல்வி, ஆனாலும் உலகம் வென்றார்!
   Slug: 32f3554e6831
 
+[2026-07-16T04:50:57.049733] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: கடையில் வேலை பார்த்தவர் இந்தியாவின் ரீட்டெயில் கிங் ஆனார்!
+  Slug: 46c86825c312
+
