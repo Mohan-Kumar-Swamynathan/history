@@ -134,3 +134,7 @@
   Topic: கடையில் வேலை பார்த்தவர் இந்தியாவின் ரீட்டெயில் கிங் ஆனார்!
   Slug: 46c86825c312
 
+[2026-07-16T15:32:27.620308] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: 10th வகுப்பு Dropout-ஐ இந்தியா ஏன் பணக்காரராக மாற்றியது?
+  Slug: 756f9cdc42bc
+
