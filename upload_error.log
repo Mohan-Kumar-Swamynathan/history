@@ -154,3 +154,7 @@
   Topic: 38 நிமிடங்கள் — வரலாற்றின் மிகக் குறுகிய போர்
   Slug: 68d9b7966067
 
+[2026-07-19T04:49:44.241894] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: 38 நிமிடங்கள் — வரலாற்றின் மிகக் குறுகிய போர்
+  Slug: 68d9b7966067
+
