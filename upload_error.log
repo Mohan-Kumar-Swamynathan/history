@@ -166,3 +166,7 @@
   Topic: 38 நிமிடங்கள் — வரலாற்றின் மிகக் குறுகிய போர்
   Slug: 68d9b7966067
 
+[2026-07-20T15:36:10.334430] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: கர்னல் சாண்டர்ஸ் — 1009 முறை நிராகரிக்கப்பட்டவர்
+  Slug: 8f2d34862944
+
