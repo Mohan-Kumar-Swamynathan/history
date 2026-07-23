@@ -190,3 +190,7 @@
   Topic: நிகோலா டெஸ்லா — மின்சாரம் கொடுத்தவர் ஏன் மறக்கப்பட்டார்?
   Slug: 57ae8acd5b18
 
+[2026-07-23T15:37:33.660849] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: 38 நிமிடங்கள் — வரலாற்றின் மிகக் குறுகிய போர்
+  Slug: 68d9b7966067
+
