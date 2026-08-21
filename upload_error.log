@@ -414,3 +414,7 @@
   Topic: நிகோலா டெஸ்லா — மின்சாரம் கொடுத்தவர் ஏன் மறக்கப்பட்டார்?
   Slug: 57ae8acd5b18
 
+[2026-08-21T14:15:01.638997] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: கர்னல் சாண்டர்ஸ் — 1009 முறை நிராகரிக்கப்பட்டவர்
+  Slug: 8f2d34862944
+
