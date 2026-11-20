@@ -1126,3 +1126,7 @@
   Topic: கர்னல் சாண்டர்ஸ் — 1009 முறை நிராகரிக்கப்பட்டவர்
   Slug: 8f2d34862944
 
+[2026-11-20T08:52:51.165827] UPLOAD ERROR: YouTube token expired and refresh failed. Re-run scripts/encode_youtube_credentials.py and update YOUTUBE_TOKEN_BASE64.
+  Topic: கர்னல் சாண்டர்ஸ் — 1009 முறை நிராகரிக்கப்பட்டவர்
+  Slug: 8f2d34862944
+
